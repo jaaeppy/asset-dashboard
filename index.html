@@ -126,23 +126,34 @@
     .search-input:focus { border-color: var(--accent); }
     .search-input::placeholder { color: var(--text-muted); }
     .search-results {
-      position: absolute; bottom: 100%; left: 0; right: 0;
-      background: #1e2130; border: 1px solid var(--border);
-      border-radius: 8px; margin-bottom: 4px; max-height: 280px;
+      position: absolute; bottom: 100%; left: 0; width: 380px;
+      background: #1e2130; border: 1px solid var(--accent);
+      border-radius: 10px; margin-bottom: 6px;
       overflow-y: auto; z-index: 100; display: none;
-      box-shadow: 0 -8px 32px rgba(0,0,0,0.4);
+      box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
     }
     .search-results.show { display: block; }
     .search-result-item {
-      padding: 10px 14px; cursor: pointer; display: flex;
+      padding: 10px 16px; cursor: pointer; display: flex;
       justify-content: space-between; align-items: center;
-      font-size: 13px; border-bottom: 1px solid rgba(42,46,59,0.4);
+      border-bottom: 1px solid rgba(42,46,59,0.5); gap: 12px;
+      min-height: 52px;
     }
-    .search-result-item:hover, .search-result-item.active { background: rgba(108,123,255,0.15); }
+    .search-result-item:hover, .search-result-item.active {
+      background: rgba(108,123,255,0.2);
+    }
     .search-result-item:last-child { border-bottom: none; }
-    .sr-name { font-weight: 500; }
-    .sr-ticker { color: var(--text-muted); font-size: 12px; }
-    .sr-exchange { color: var(--accent-light); font-size: 11px; margin-left: 8px; }
+    .sr-left { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .sr-name { font-weight: 600; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sr-meta { display: flex; align-items: center; gap: 6px; }
+    .sr-code { color: var(--text-muted); font-size: 12px; font-family: monospace; }
+    .sr-market { font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 3px; }
+    .sr-market.kospi { background: rgba(59,130,246,0.2); color: #60a5fa; }
+    .sr-market.kosdaq { background: rgba(34,197,94,0.2); color: #4ade80; }
+    .sr-market.us { background: rgba(108,123,255,0.2); color: var(--accent-light); }
+    .sr-market.etf { background: rgba(234,179,8,0.2); color: var(--yellow); }
+    .sr-right { text-align: right; flex-shrink: 0; }
+    .sr-ticker { color: var(--text-muted); font-size: 12px; font-family: monospace; }
 
     .add-input {
       background: rgba(255,255,255,0.06); border: 1px solid var(--border);
@@ -332,8 +343,66 @@ async function fetchExchangeRate() {
 // ===================================================================
 // STOCK SEARCH (Yahoo Finance)
 // ===================================================================
+function hasKorean(str) { return /[가-힣]/.test(str); }
+
 async function searchStock(query) {
   if (!query || query.length < 1) return [];
+
+  if (hasKorean(query)) {
+    // Korean → NAVER mobile stock search API
+    try {
+      const naverUrl = `https://m.stock.naver.com/front-api/search/totalSearch?keyword=${encodeURIComponent(query)}`;
+      const res = await corsFetch(naverUrl);
+      if (res) {
+        const data = await res.json();
+        const stocks = data?.result?.stock?.items || [];
+        const etfs = data?.result?.etf?.items || [];
+        const all = [...stocks, ...etfs].slice(0, 8);
+        const results = all.map(item => {
+          const code = item.code || item.itemCode || '';
+          const market = item.stockExchangeType?.code || item.marketType || '';
+          const isKospi = market === 'KOSPI' || market === 'kospi';
+          const isEtf = !!(item.etfBasicInfo || etfs.includes(item));
+          return {
+            symbol: code + (isKospi ? '.KS' : '.KQ'),
+            symbolAlt: code + (isKospi ? '.KQ' : '.KS'),
+            name: item.name || item.stockName || code,
+            exchange: market || 'KRX',
+            type: isEtf ? 'ETF' : 'EQUITY',
+            code
+          };
+        }).filter(r => r.code);
+        if (results.length > 0) return results;
+      }
+    } catch(e) { console.warn('NAVER search failed', e); }
+
+    // Fallback: NAVER AC autocomplete
+    try {
+      const acUrl = `https://ac.finance.naver.com/ac?q=${encodeURIComponent(query)}&q_enc=utf-8&t_koreng=1&st=111&r_lt=111`;
+      const res = await corsFetch(acUrl);
+      if (res) {
+        const text = await res.text();
+        // handle both JSON and JSONP
+        const jsonStr = text.startsWith('ac.run(') ? text.slice(7, -1) : text;
+        const data = JSON.parse(jsonStr);
+        const items = data.items || [];
+        // format: [[names...], [codes...]] or [[name,code], ...]
+        const names = Array.isArray(items[0]) ? items[0] : [];
+        const codes = Array.isArray(items[1]) ? items[1] : [];
+        const results = [];
+        for (let i = 0; i < names.length && i < 8; i++) {
+          const name = Array.isArray(names[i]) ? names[i][0] : names[i];
+          const code = Array.isArray(codes[i]) ? codes[i][0] : codes[i];
+          if (code && /^\d{6}$/.test(code)) {
+            results.push({ symbol: code + '.KS', symbolAlt: code + '.KQ', name, exchange: 'KRX', type: 'EQUITY', code });
+          }
+        }
+        if (results.length > 0) return results;
+      }
+    } catch(e) { console.warn('NAVER AC failed', e); }
+  }
+
+  // English / fallback → Yahoo Finance
   try {
     const yahooUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&listsCount=0`;
     const res = await corsFetch(yahooUrl);
@@ -346,49 +415,60 @@ async function searchStock(query) {
           symbol: q.symbol,
           name: q.shortname || q.longname || q.symbol,
           exchange: q.exchDisp || q.exchange || '',
-          type: q.quoteType
+          type: q.quoteType,
+          code: ''
         }));
     }
-  } catch(e) { console.warn('Stock search failed', e); }
+  } catch(e) { console.warn('Yahoo search failed', e); }
   return [];
 }
 
-async function fetchStockPrice(symbol) {
-  // Try Yahoo Finance v8 chart API
-  try {
-    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
-    const res = await corsFetch(yahooUrl);
-    if (res) {
-      const data = await res.json();
-      const meta = data.chart?.result?.[0]?.meta;
-      if (meta && meta.regularMarketPrice) {
-        return {
-          price: meta.regularMarketPrice,
-          previousClose: meta.previousClose || meta.chartPreviousClose || 0,
-          currency: meta.currency || 'KRW',
-          symbol: meta.symbol
-        };
+async function fetchStockPrice(symbol, altSymbol) {
+  const trySymbol = async (sym) => {
+    // v8 chart API
+    try {
+      const res = await corsFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`);
+      if (res) {
+        const data = await res.json();
+        const meta = data.chart?.result?.[0]?.meta;
+        if (meta && meta.regularMarketPrice) {
+          return {
+            price: meta.regularMarketPrice,
+            previousClose: meta.previousClose || meta.chartPreviousClose || 0,
+            currency: meta.currency || 'KRW',
+            symbol: meta.symbol
+          };
+        }
       }
-    }
-  } catch(e) { console.warn(`Chart API failed for ${symbol}`, e); }
+    } catch(e) {}
 
-  // Fallback: Yahoo Finance v6 quote API
-  try {
-    const quoteUrl = `https://query1.finance.yahoo.com/v6/finance/quote?symbols=${encodeURIComponent(symbol)}`;
-    const res = await corsFetch(quoteUrl);
-    if (res) {
-      const data = await res.json();
-      const q = data.quoteResponse?.result?.[0];
-      if (q) {
-        return {
-          price: q.regularMarketPrice,
-          previousClose: q.regularMarketPreviousClose || 0,
-          currency: q.currency || 'KRW',
-          symbol: q.symbol
-        };
+    // v6 quote API fallback
+    try {
+      const res = await corsFetch(`https://query1.finance.yahoo.com/v6/finance/quote?symbols=${encodeURIComponent(sym)}`);
+      if (res) {
+        const data = await res.json();
+        const q = data.quoteResponse?.result?.[0];
+        if (q && q.regularMarketPrice) {
+          return {
+            price: q.regularMarketPrice,
+            previousClose: q.regularMarketPreviousClose || 0,
+            currency: q.currency || 'KRW',
+            symbol: q.symbol
+          };
+        }
       }
-    }
-  } catch(e) { console.warn(`Quote API failed for ${symbol}`, e); }
+    } catch(e) {}
+    return null;
+  };
+
+  const result = await trySymbol(symbol);
+  if (result) return result;
+
+  // Try alternate symbol (KS ↔ KQ)
+  if (altSymbol) {
+    const alt = await trySymbol(altSymbol);
+    if (alt) return alt;
+  }
 
   return null;
 }
@@ -741,27 +821,51 @@ function onSearchInput(accId, query) {
   }, 300);
 }
 
+function getMarketBadge(r) {
+  const ex = (r.exchange || '').toUpperCase();
+  const type = (r.type || '').toUpperCase();
+  if (type === 'ETF') return `<span class="sr-market etf">ETF</span>`;
+  if (ex.includes('KOSPI') || ex.includes('KSC')) return `<span class="sr-market kospi">KOSPI</span>`;
+  if (ex.includes('KOSDAQ') || ex.includes('KOE')) return `<span class="sr-market kosdaq">KOSDAQ</span>`;
+  if (ex.includes('KRX') || ex.includes('KSE') || r.symbol?.endsWith('.KS')) return `<span class="sr-market kospi">KOSPI</span>`;
+  if (r.symbol?.endsWith('.KQ')) return `<span class="sr-market kosdaq">KOSDAQ</span>`;
+  return `<span class="sr-market us">${ex || 'US'}</span>`;
+}
+
 function renderSearchResults(accId) {
   const resultsEl = document.getElementById(`results-${accId}`);
   const results = searchResults[accId] || [];
   const activeIdx = searchActiveIdx[accId] ?? -1;
 
   if (results.length === 0) {
-    resultsEl.innerHTML = '<div class="search-result-item" style="color:var(--text-muted);cursor:default">검색 결과가 없습니다</div>';
+    resultsEl.innerHTML = `<div class="search-result-item" style="color:var(--text-muted);cursor:default;justify-content:center">
+      검색 결과가 없습니다</div>`;
     resultsEl.classList.add('show');
     return;
   }
 
+  // Always show 5 items worth of height
+  const itemHeight = 52;
+  const visibleCount = Math.min(5, results.length);
+  resultsEl.style.height = (itemHeight * visibleCount) + 'px';
+
   resultsEl.innerHTML = results.map((r, i) => {
-    const escapedName = r.name.replace(/'/g, "\\'").replace(/`/g, "'");
+    // safely encode for inline onclick
+    const nameEsc = r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const altSym = r.symbolAlt || '';
     return `<div class="search-result-item${i === activeIdx ? ' active' : ''}"
-      onclick="selectStock('${accId}', '${r.symbol}', '${escapedName}', '${r.exchange}')"
+      onclick="selectStock('${accId}','${r.symbol}','${nameEsc}','${r.exchange}','${altSym}')"
       onmouseenter="searchActiveIdx['${accId}']=${i}; renderSearchResults('${accId}')">
-      <div>
+      <div class="sr-left">
         <span class="sr-name">${r.name}</span>
-        <span class="sr-exchange">${r.exchange}</span>
+        <div class="sr-meta">
+          ${r.code ? `<span class="sr-code">${r.code}</span>` : ''}
+          ${getMarketBadge(r)}
+        </div>
       </div>
-      <span class="sr-ticker">${r.symbol}</span>
+      <div class="sr-right">
+        <div class="sr-ticker">${r.symbol}</div>
+      </div>
     </div>`;
   }).join('');
   resultsEl.classList.add('show');
@@ -795,14 +899,14 @@ function onSearchKeydown(e, accId) {
     e.preventDefault();
     if (idx >= 0 && idx < results.length) {
       const r = results[idx];
-      selectStock(accId, r.symbol, r.name, r.exchange);
+      selectStock(accId, r.symbol, r.name, r.exchange, r.symbolAlt || '');
     }
   } else if (e.key === 'Escape') {
     resultsEl.classList.remove('show');
   }
 }
 
-async function selectStock(accId, symbol, name, exchange) {
+async function selectStock(accId, symbol, name, exchange, altSymbol) {
   const searchInput = document.getElementById(`search-${accId}`);
   const resultsEl = document.getElementById(`results-${accId}`);
   const statusEl = document.getElementById(`search-status-${accId}`);
@@ -812,19 +916,19 @@ async function selectStock(accId, symbol, name, exchange) {
   searchResults[accId] = [];
   statusEl.innerHTML = '<span class="loading-spinner"></span> 시세 조회중...';
 
-  const priceData = await fetchStockPrice(symbol);
-  selectedStock[accId] = { symbol, name, exchange };
+  const priceData = await fetchStockPrice(symbol, altSymbol || '');
+  // use the actual resolved symbol if alt was used
+  const resolvedSymbol = priceData?.symbol || symbol;
+  selectedStock[accId] = { symbol: resolvedSymbol, name, exchange };
 
   if (priceData) {
     selectedStock[accId].price = priceData.price;
     selectedStock[accId].previousClose = priceData.previousClose;
     selectedStock[accId].currency = priceData.currency;
     statusEl.innerHTML = `<span style="color:var(--green)">✓</span> 현재가: ${fmtPrice(priceData.price, priceData.currency)}`;
-    // Auto-focus qty input
-    const qtyInput = document.getElementById(`add-${accId}-qty`);
-    if (qtyInput) qtyInput.focus();
+    document.getElementById(`add-${accId}-qty`)?.focus();
   } else {
-    statusEl.innerHTML = `<span style="color:var(--yellow)">!</span> 시세 조회 실패 - 수동 입력 필요`;
+    statusEl.innerHTML = `<span style="color:var(--yellow)">!</span> 시세 조회 실패 — 수동으로 현재가를 입력해주세요`;
   }
 }
 
