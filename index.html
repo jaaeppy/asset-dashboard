@@ -268,20 +268,25 @@
 // ===================================================================
 // CONFIG
 // ===================================================================
-const CORS_PROXIES = [
-  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-];
-let proxyIndex = 0;
-
 async function corsFetch(url) {
-  for (let i = 0; i < CORS_PROXIES.length; i++) {
-    const idx = (proxyIndex + i) % CORS_PROXIES.length;
-    try {
-      const res = await fetch(CORS_PROXIES[idx](url));
-      if (res.ok) { proxyIndex = idx; return res; }
-    } catch(e) { /* try next */ }
-  }
+  // 1) 직접 요청 (Yahoo Finance 등 일부 API는 CORS 허용)
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (res.ok) return res;
+  } catch(e) {}
+
+  // 2) allorigins
+  try {
+    const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+    if (res.ok) return res;
+  } catch(e) {}
+
+  // 3) corsproxy.io (?url= 형식)
+  try {
+    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`);
+    if (res.ok) return res;
+  } catch(e) {}
+
   return null;
 }
 
@@ -865,10 +870,8 @@ function renderSearchResults(accId) {
   }
 
   resultsEl.innerHTML = results.map((r, i) => {
-    const nameEsc = r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    const altSym = r.symbolAlt || '';
     return `<div class="search-result-item${i === activeIdx ? ' active' : ''}"
-      onclick="selectStock('${accId}','${r.symbol}','${nameEsc}','${r.exchange}','${altSym}')"
+      data-accid="${accId}" data-idx="${i}"
       onmouseenter="searchActiveIdx['${accId}']=${i}; renderSearchResults('${accId}')">
       <div class="sr-left">
         <span class="sr-name">${r.name}</span>
@@ -948,9 +951,18 @@ async function selectStock(accId, symbol, name, exchange, altSymbol) {
   }
 }
 
-// Close search results when clicking outside
+// 검색 결과 클릭 — data 속성으로 선택 (한글 onclick 파싱 오류 방지)
 document.addEventListener('click', e => {
-  if (!e.target.closest('.search-wrap')) {
+  const item = e.target.closest('.search-result-item[data-idx]');
+  if (item) {
+    const accId = item.dataset.accid;
+    const idx = parseInt(item.dataset.idx);
+    const r = (searchResults[accId] || [])[idx];
+    if (r) selectStock(accId, r.symbol, r.name, r.exchange, r.symbolAlt || '');
+    return;
+  }
+  // 외부 클릭 시 닫기
+  if (!e.target.closest('.search-wrap') && !e.target.closest('.search-results')) {
     document.querySelectorAll('.search-results').forEach(el => el.classList.remove('show'));
   }
 });
