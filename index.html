@@ -268,22 +268,35 @@
 // ===================================================================
 // CONFIG
 // ===================================================================
-async function corsFetch(url) {
-  // 1) 직접 요청 (Yahoo Finance 등 일부 API는 CORS 허용)
+async function fetchWithTimeout(url, ms = 5000) {
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), ms);
   try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(tid);
+    return res;
+  } catch(e) {
+    clearTimeout(tid);
+    throw e;
+  }
+}
+
+async function corsFetch(url) {
+  // 1) corsproxy.io (가장 안정적)
+  try {
+    const res = await fetchWithTimeout(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, 6000);
     if (res.ok) return res;
   } catch(e) {}
 
   // 2) allorigins
   try {
-    const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+    const res = await fetchWithTimeout(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, 5000);
     if (res.ok) return res;
   } catch(e) {}
 
-  // 3) corsproxy.io (?url= 형식)
+  // 3) 직접 요청
   try {
-    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(url)}`);
+    const res = await fetchWithTimeout(url, 4000);
     if (res.ok) return res;
   } catch(e) {}
 
