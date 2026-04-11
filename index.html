@@ -138,7 +138,7 @@
       justify-content: space-between; align-items: center;
       font-size: 13px; border-bottom: 1px solid rgba(42,46,59,0.4);
     }
-    .search-result-item:hover { background: rgba(108,123,255,0.1); }
+    .search-result-item:hover, .search-result-item.active { background: rgba(108,123,255,0.15); }
     .search-result-item:last-child { border-bottom: none; }
     .sr-name { font-weight: 500; }
     .sr-ticker { color: var(--text-muted); font-size: 12px; }
@@ -257,7 +257,22 @@
 // ===================================================================
 // CONFIG
 // ===================================================================
-const CORS_PROXY = 'https://corsproxy.io/?url=';
+const CORS_PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+];
+let proxyIndex = 0;
+
+async function corsFetch(url) {
+  for (let i = 0; i < CORS_PROXIES.length; i++) {
+    const idx = (proxyIndex + i) % CORS_PROXIES.length;
+    try {
+      const res = await fetch(CORS_PROXIES[idx](url));
+      if (res.ok) { proxyIndex = idx; return res; }
+    } catch(e) { /* try next */ }
+  }
+  return null;
+}
 
 const ACCOUNTS = [
   { id: 'cash',     name: '현금',     badge: 'badge-cash',     type: 'cash' },
@@ -279,6 +294,8 @@ let exchangeRate = 1400;
 let portfolio = {};
 let searchTimeout = null;
 let activeSearchAccId = null;
+let searchResults = {}; // store results per accId
+let searchActiveIdx = {}; // active index per accId
 
 // ===================================================================
 // INIT
@@ -318,8 +335,9 @@ async function fetchExchangeRate() {
 async function searchStock(query) {
   if (!query || query.length < 1) return [];
   try {
-    const url = `${CORS_PROXY}${encodeURIComponent(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=8&newsCount=0&listsCount=0`)}`;
-    const res = await fetch(url);
+    const yahooUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&listsCount=0`;
+    const res = await corsFetch(yahooUrl);
+    if (!res) return [];
     const data = await res.json();
     if (data.quotes) {
       return data.quotes
@@ -327,33 +345,51 @@ async function searchStock(query) {
         .map(q => ({
           symbol: q.symbol,
           name: q.shortname || q.longname || q.symbol,
-          exchange: q.exchange || q.exchDisp || '',
+          exchange: q.exchDisp || q.exchange || '',
           type: q.quoteType
         }));
     }
-  } catch(e) {
-    console.warn('Stock search failed', e);
-  }
+  } catch(e) { console.warn('Stock search failed', e); }
   return [];
 }
 
 async function fetchStockPrice(symbol) {
+  // Try Yahoo Finance v8 chart API
   try {
-    const url = `${CORS_PROXY}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`)}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    const meta = data.chart?.result?.[0]?.meta;
-    if (meta) {
-      return {
-        price: meta.regularMarketPrice,
-        previousClose: meta.previousClose || meta.chartPreviousClose,
-        currency: meta.currency || 'KRW',
-        symbol: meta.symbol
-      };
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+    const res = await corsFetch(yahooUrl);
+    if (res) {
+      const data = await res.json();
+      const meta = data.chart?.result?.[0]?.meta;
+      if (meta && meta.regularMarketPrice) {
+        return {
+          price: meta.regularMarketPrice,
+          previousClose: meta.previousClose || meta.chartPreviousClose || 0,
+          currency: meta.currency || 'KRW',
+          symbol: meta.symbol
+        };
+      }
     }
-  } catch(e) {
-    console.warn(`Price fetch failed for ${symbol}`, e);
-  }
+  } catch(e) { console.warn(`Chart API failed for ${symbol}`, e); }
+
+  // Fallback: Yahoo Finance v6 quote API
+  try {
+    const quoteUrl = `https://query1.finance.yahoo.com/v6/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+    const res = await corsFetch(quoteUrl);
+    if (res) {
+      const data = await res.json();
+      const q = data.quoteResponse?.result?.[0];
+      if (q) {
+        return {
+          price: q.regularMarketPrice,
+          previousClose: q.regularMarketPreviousClose || 0,
+          currency: q.currency || 'KRW',
+          symbol: q.symbol
+        };
+      }
+    }
+  } catch(e) { console.warn(`Quote API failed for ${symbol}`, e); }
+
   return null;
 }
 
@@ -670,6 +706,7 @@ function renderAddArea(acc) {
         placeholder="종목명 검색 (예: 삼성전자, AAPL)"
         oninput="onSearchInput('${acc.id}', this.value)"
         onfocus="onSearchInput('${acc.id}', this.value)"
+        onkeydown="onSearchKeydown(event, '${acc.id}')"
         autocomplete="off">
       <div class="search-results" id="results-${acc.id}"></div>
     </div>
@@ -681,39 +718,88 @@ function renderAddArea(acc) {
 }
 
 // ===================================================================
-// SEARCH UI
+// SEARCH UI + KEYBOARD NAVIGATION
 // ===================================================================
 let selectedStock = {}; // per account
 
 function onSearchInput(accId, query) {
   clearTimeout(searchTimeout);
+  selectedStock[accId] = null;
+  searchActiveIdx[accId] = -1;
   const resultsEl = document.getElementById(`results-${accId}`);
 
-  if (query.length < 1) { resultsEl.classList.remove('show'); return; }
+  if (query.length < 1) { resultsEl.classList.remove('show'); searchResults[accId] = []; return; }
 
   searchTimeout = setTimeout(async () => {
     const statusEl = document.getElementById(`search-status-${accId}`);
     statusEl.innerHTML = '<span class="loading-spinner"></span>';
     const results = await searchStock(query);
     statusEl.textContent = '';
-
-    if (results.length === 0) {
-      resultsEl.innerHTML = '<div class="search-result-item" style="color:var(--text-muted)">검색 결과가 없습니다</div>';
-      resultsEl.classList.add('show');
-      return;
-    }
-
-    resultsEl.innerHTML = results.map(r =>
-      `<div class="search-result-item" onclick="selectStock('${accId}', '${r.symbol}', \`${r.name.replace(/`/g,"'")}\`, '${r.exchange}')">
-        <div>
-          <span class="sr-name">${r.name}</span>
-          <span class="sr-exchange">${r.exchange}</span>
-        </div>
-        <span class="sr-ticker">${r.symbol}</span>
-      </div>`
-    ).join('');
-    resultsEl.classList.add('show');
+    searchResults[accId] = results;
+    searchActiveIdx[accId] = -1;
+    renderSearchResults(accId);
   }, 300);
+}
+
+function renderSearchResults(accId) {
+  const resultsEl = document.getElementById(`results-${accId}`);
+  const results = searchResults[accId] || [];
+  const activeIdx = searchActiveIdx[accId] ?? -1;
+
+  if (results.length === 0) {
+    resultsEl.innerHTML = '<div class="search-result-item" style="color:var(--text-muted);cursor:default">검색 결과가 없습니다</div>';
+    resultsEl.classList.add('show');
+    return;
+  }
+
+  resultsEl.innerHTML = results.map((r, i) => {
+    const escapedName = r.name.replace(/'/g, "\\'").replace(/`/g, "'");
+    return `<div class="search-result-item${i === activeIdx ? ' active' : ''}"
+      onclick="selectStock('${accId}', '${r.symbol}', '${escapedName}', '${r.exchange}')"
+      onmouseenter="searchActiveIdx['${accId}']=${i}; renderSearchResults('${accId}')">
+      <div>
+        <span class="sr-name">${r.name}</span>
+        <span class="sr-exchange">${r.exchange}</span>
+      </div>
+      <span class="sr-ticker">${r.symbol}</span>
+    </div>`;
+  }).join('');
+  resultsEl.classList.add('show');
+}
+
+function onSearchKeydown(e, accId) {
+  const results = searchResults[accId] || [];
+  if (results.length === 0) return;
+
+  const resultsEl = document.getElementById(`results-${accId}`);
+  if (!resultsEl.classList.contains('show')) return;
+
+  let idx = searchActiveIdx[accId] ?? -1;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    idx = idx < results.length - 1 ? idx + 1 : 0;
+    searchActiveIdx[accId] = idx;
+    renderSearchResults(accId);
+    // scroll into view
+    const items = resultsEl.querySelectorAll('.search-result-item');
+    if (items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    idx = idx > 0 ? idx - 1 : results.length - 1;
+    searchActiveIdx[accId] = idx;
+    renderSearchResults(accId);
+    const items = resultsEl.querySelectorAll('.search-result-item');
+    if (items[idx]) items[idx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (idx >= 0 && idx < results.length) {
+      const r = results[idx];
+      selectStock(accId, r.symbol, r.name, r.exchange);
+    }
+  } else if (e.key === 'Escape') {
+    resultsEl.classList.remove('show');
+  }
 }
 
 async function selectStock(accId, symbol, name, exchange) {
@@ -723,6 +809,7 @@ async function selectStock(accId, symbol, name, exchange) {
 
   searchInput.value = name;
   resultsEl.classList.remove('show');
+  searchResults[accId] = [];
   statusEl.innerHTML = '<span class="loading-spinner"></span> 시세 조회중...';
 
   const priceData = await fetchStockPrice(symbol);
@@ -733,6 +820,9 @@ async function selectStock(accId, symbol, name, exchange) {
     selectedStock[accId].previousClose = priceData.previousClose;
     selectedStock[accId].currency = priceData.currency;
     statusEl.innerHTML = `<span style="color:var(--green)">✓</span> 현재가: ${fmtPrice(priceData.price, priceData.currency)}`;
+    // Auto-focus qty input
+    const qtyInput = document.getElementById(`add-${accId}-qty`);
+    if (qtyInput) qtyInput.focus();
   } else {
     statusEl.innerHTML = `<span style="color:var(--yellow)">!</span> 시세 조회 실패 - 수동 입력 필요`;
   }
