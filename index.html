@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>자산관리 대시보드</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d27;
+      --card-hover: #222632;
+      --border: #2a2e3b;
+      --text: #e4e6ed;
+      --text-muted: #8b8fa3;
+      --accent: #6c7bff;
+      --accent-light: #8b97ff;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --blue: #3b82f6;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 24px; padding: 24px 28px;
+      background: var(--card); border-radius: 16px; border: 1px solid var(--border);
+    }
+    .header-left h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+    .header-left .date { font-size: 13px; color: var(--text-muted); }
+    .header-right { text-align: right; }
+    .total-label { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+    .total-value { font-size: 32px; font-weight: 700; letter-spacing: -1px; }
+    .total-pnl { font-size: 14px; margin-top: 2px; }
+    .exchange-rate { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .exchange-rate span { color: var(--accent-light); font-weight: 500; }
+
+    /* ===== CHARTS ===== */
+    .charts-section {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 20px; margin-bottom: 24px;
+    }
+    .chart-card {
+      background: var(--card); border-radius: 16px;
+      border: 1px solid var(--border); padding: 24px;
+    }
+    .chart-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 16px; color: var(--text-muted); }
+    .chart-wrapper { position: relative; height: 280px; display: flex; justify-content: center; align-items: center; }
+    .chart-legend { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-value { color: var(--text); font-weight: 500; }
+
+    /* ===== TOOLBAR ===== */
+    .toolbar { display: flex; gap: 8px; margin-bottom: 20px; justify-content: flex-end; align-items: center; }
+    .toolbar .status { font-size: 12px; color: var(--text-muted); margin-right: auto; }
+
+    /* ===== ACCOUNTS ===== */
+    .accounts-section { display: flex; flex-direction: column; gap: 20px; }
+    .account-card { background: var(--card); border-radius: 16px; border: 1px solid var(--border); overflow: hidden; }
+    .account-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 24px; background: rgba(108,123,255,0.05);
+      border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
+    }
+    .account-header:hover { background: rgba(108,123,255,0.1); }
+    .account-header h3 { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .toggle-icon { transition: transform 0.2s; color: var(--text-muted); font-size: 12px; }
+    .collapsed .toggle-icon { transform: rotate(-90deg); }
+    .account-subtotal { display: flex; gap: 24px; align-items: center; }
+    .subtotal-item { text-align: right; }
+    .subtotal-label { font-size: 11px; color: var(--text-muted); }
+    .subtotal-value { font-size: 16px; font-weight: 600; }
+    .account-body { overflow: hidden; }
+    .account-body.collapsed { display: none; }
+
+    /* ===== TABLE ===== */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      padding: 10px 12px; text-align: right; font-weight: 500;
+      color: var(--text-muted); border-bottom: 1px solid var(--border);
+      font-size: 12px; white-space: nowrap;
+    }
+    thead th:first-child { text-align: left; }
+    tbody td {
+      padding: 8px 12px; text-align: right;
+      border-bottom: 1px solid rgba(42,46,59,0.5); white-space: nowrap;
+    }
+    tbody td:first-child { text-align: left; font-weight: 500; }
+    tbody tr:hover { background: var(--card-hover); }
+    tbody tr:last-child td { border-bottom: none; }
+    .positive { color: var(--red); }
+    .negative { color: var(--blue); }
+
+    /* ===== EDITABLE CELLS ===== */
+    .cell-edit {
+      background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+      color: var(--text); padding: 4px 8px; border-radius: 4px;
+      font-size: 13px; font-family: inherit; text-align: right;
+      width: 100px; outline: none;
+    }
+    .cell-edit:focus { border-color: var(--accent); background: rgba(108,123,255,0.1); }
+
+    /* ===== SEARCH / ADD ===== */
+    .add-area {
+      padding: 12px 24px; border-top: 1px solid var(--border);
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap; position: relative;
+    }
+    .search-wrap { position: relative; }
+    .search-input {
+      background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+      color: var(--text); padding: 8px 12px; border-radius: 8px;
+      font-size: 13px; font-family: inherit; width: 260px; outline: none;
+    }
+    .search-input:focus { border-color: var(--accent); }
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-results {
+      position: absolute; top: 100%; left: 0; right: 0;
+      background: #1e2130; border: 1px solid var(--border);
+      border-radius: 8px; margin-top: 4px; max-height: 240px;
+      overflow-y: auto; z-index: 100; display: none;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .search-results.show { display: block; }
+    .search-result-item {
+      padding: 10px 14px; cursor: pointer; display: flex;
+      justify-content: space-between; align-items: center;
+      font-size: 13px; border-bottom: 1px solid rgba(42,46,59,0.4);
+    }
+    .search-result-item:hover { background: rgba(108,123,255,0.1); }
+    .search-result-item:last-child { border-bottom: none; }
+    .sr-name { font-weight: 500; }
+    .sr-ticker { color: var(--text-muted); font-size: 12px; }
+    .sr-exchange { color: var(--accent-light); font-size: 11px; margin-left: 8px; }
+
+    .add-input {
+      background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+      color: var(--text); padding: 8px 12px; border-radius: 8px;
+      font-size: 13px; font-family: inherit; width: 120px; outline: none; text-align: right;
+    }
+    .add-input:focus { border-color: var(--accent); }
+    .add-input::placeholder { color: var(--text-muted); }
+
+    .btn {
+      background: var(--accent); color: white; border: none;
+      padding: 8px 16px; border-radius: 8px; font-size: 13px;
+      font-family: inherit; font-weight: 500; cursor: pointer;
+    }
+    .btn:hover { background: var(--accent-light); }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+    .btn-outline {
+      background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+    }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent-light); background: rgba(108,123,255,0.1); }
+    .btn-icon {
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; padding: 4px; font-size: 14px; line-height: 1;
+    }
+    .btn-icon:hover { color: var(--red); }
+    .btn-refresh { color: var(--text-muted); font-size: 12px; cursor: pointer; background: none; border: none; padding: 2px 4px; }
+    .btn-refresh:hover { color: var(--accent-light); }
+
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 500;
+    }
+    .badge-cash { background: rgba(234,179,8,0.15); color: var(--yellow); }
+    .badge-dollar { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge-domestic { background: rgba(59,130,246,0.15); color: var(--blue); }
+    .badge-foreign { background: rgba(236,72,153,0.15); color: #ec4899; }
+    .badge-isa { background: rgba(108,123,255,0.15); color: var(--accent-light); }
+    .badge-pension { background: rgba(239,68,68,0.15); color: var(--red); }
+
+    .empty-state { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+    .loading-spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #2d3148; color: var(--text); padding: 12px 20px;
+      border-radius: 10px; font-size: 13px; z-index: 1000;
+      border: 1px solid var(--border); opacity: 0; transition: opacity 0.3s;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .toast.show { opacity: 1; }
+
+    @media (max-width: 768px) {
+      body { padding: 12px; }
+      .charts-section { grid-template-columns: 1fr; }
+      .header { flex-direction: column; gap: 16px; text-align: center; }
+      .header-right { text-align: center; }
+      .total-value { font-size: 24px; }
+      .search-input { width: 200px; }
+      .add-input { width: 90px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>자산관리 대시보드</h1>
+    <div class="date" id="currentDate"></div>
+  </div>
+  <div class="header-right">
+    <div class="total-label">총 평가금액</div>
+    <div class="total-value" id="totalValue">0 원</div>
+    <div class="total-pnl" id="totalPnl"></div>
+    <div class="exchange-rate">USD/KRW <span id="exchangeRateDisplay">로딩중...</span></div>
+  </div>
+</div>
+
+<div class="charts-section">
+  <div class="chart-card">
+    <h2>자산군별 비중</h2>
+    <div class="chart-wrapper"><canvas id="categoryChart"></canvas></div>
+    <div class="chart-legend" id="categoryLegend"></div>
+  </div>
+  <div class="chart-card">
+    <h2>종목별 비중</h2>
+    <div class="chart-wrapper"><canvas id="holdingChart"></canvas></div>
+    <div class="chart-legend" id="holdingLegend"></div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <div class="status" id="statusText"></div>
+  <button class="btn btn-outline btn-sm" onclick="refreshAllPrices()">시세 새로고침</button>
+  <button class="btn btn-outline btn-sm" onclick="saveData(); showToast('저장 완료')">저장</button>
+  <button class="btn btn-outline btn-sm" onclick="exportJSON()">내보내기</button>
+  <label class="btn btn-outline btn-sm" style="cursor:pointer">
+    불러오기 <input type="file" accept=".json" onchange="importJSON(event)" style="display:none">
+  </label>
+</div>
+
+<div class="accounts-section" id="accountsContainer"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===================================================================
+// CONFIG
+// ===================================================================
+const CORS_PROXY = 'https://corsproxy.io/?url=';
+
+const ACCOUNTS = [
+  { id: 'cash',     name: '현금',     badge: 'badge-cash',     type: 'cash' },
+  { id: 'dollar',   name: '달러',     badge: 'badge-dollar',   type: 'dollar' },
+  { id: 'domestic', name: '국내주식', badge: 'badge-domestic', type: 'stock',  currency: 'KRW' },
+  { id: 'foreign',  name: '해외주식', badge: 'badge-foreign',  type: 'stock',  currency: 'USD' },
+  { id: 'isa',      name: 'ISA',      badge: 'badge-isa',      type: 'stock',  currency: 'KRW' },
+  { id: 'pension',  name: '연금',     badge: 'badge-pension',  type: 'stock',  currency: 'KRW' },
+];
+
+const CATEGORY_COLORS = ['#eab308','#22c55e','#3b82f6','#ec4899','#8b5cf6','#ef4444','#06b6d4'];
+const HOLDING_COLORS = [
+  '#6c7bff','#3b82f6','#06b6d4','#22c55e','#84cc16','#eab308','#f97316',
+  '#ef4444','#ec4899','#8b5cf6','#14b8a6','#f59e0b','#64748b','#a78bfa',
+  '#fb923c','#4ade80','#38bdf8','#c084fc','#fb7185','#facc15'
+];
+
+let exchangeRate = 1400;
+let portfolio = {};
+let searchTimeout = null;
+let activeSearchAccId = null;
+
+// ===================================================================
+// INIT
+// ===================================================================
+function init() {
+  const now = new Date();
+  document.getElementById('currentDate').textContent =
+    `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 기준`;
+
+  loadData();
+  ACCOUNTS.forEach(a => { if (!portfolio[a.id]) portfolio[a.id] = []; });
+  initCharts();
+  fetchExchangeRate();
+  renderAll();
+}
+
+// ===================================================================
+// EXCHANGE RATE
+// ===================================================================
+async function fetchExchangeRate() {
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD');
+    const data = await res.json();
+    if (data.rates?.KRW) {
+      exchangeRate = data.rates.KRW;
+      document.getElementById('exchangeRateDisplay').textContent = exchangeRate.toFixed(2) + ' 원';
+      renderAll();
+      return;
+    }
+  } catch(e) { console.warn('Exchange rate fetch failed', e); }
+  document.getElementById('exchangeRateDisplay').textContent = exchangeRate.toFixed(2) + ' 원 (기본값)';
+}
+
+// ===================================================================
+// STOCK SEARCH (Yahoo Finance)
+// ===================================================================
+async function searchStock(query) {
+  if (!query || query.length < 1) return [];
+  try {
+    const url = `${CORS_PROXY}${encodeURIComponent(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=8&newsCount=0&listsCount=0`)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.quotes) {
+      return data.quotes
+        .filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF')
+        .map(q => ({
+          symbol: q.symbol,
+          name: q.shortname || q.longname || q.symbol,
+          exchange: q.exchange || q.exchDisp || '',
+          type: q.quoteType
+        }));
+    }
+  } catch(e) {
+    console.warn('Stock search failed', e);
+  }
+  return [];
+}
+
+async function fetchStockPrice(symbol) {
+  try {
+    const url = `${CORS_PROXY}${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const meta = data.chart?.result?.[0]?.meta;
+    if (meta) {
+      return {
+        price: meta.regularMarketPrice,
+        previousClose: meta.previousClose || meta.chartPreviousClose,
+        currency: meta.currency || 'KRW',
+        symbol: meta.symbol
+      };
+    }
+  } catch(e) {
+    console.warn(`Price fetch failed for ${symbol}`, e);
+  }
+  return null;
+}
+
+async function refreshAllPrices() {
+  const statusEl = document.getElementById('statusText');
+  let total = 0, done = 0;
+
+  ACCOUNTS.forEach(acc => {
+    if (acc.type === 'stock') {
+      (portfolio[acc.id] || []).forEach(item => { if (item.symbol) total++; });
+    }
+  });
+
+  if (total === 0) { showToast('조회할 종목이 없습니다'); return; }
+  statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (0/${total})`;
+
+  for (const acc of ACCOUNTS) {
+    if (acc.type !== 'stock') continue;
+    for (const item of (portfolio[acc.id] || [])) {
+      if (!item.symbol) continue;
+      const result = await fetchStockPrice(item.symbol);
+      if (result) {
+        item.price = result.price;
+        item.previousClose = result.previousClose;
+      }
+      done++;
+      statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (${done}/${total})`;
+    }
+  }
+
+  statusEl.textContent = `마지막 시세 조회: ${new Date().toLocaleTimeString('ko-KR')}`;
+  saveData();
+  renderAll();
+  showToast(`${total}개 종목 시세 업데이트 완료`);
+}
+
+// ===================================================================
+// CALCULATIONS
+// ===================================================================
+function getItemEvalKRW(acc, item) {
+  if (acc.type === 'cash') return parseFloat(item.amount) || 0;
+  if (acc.type === 'dollar') return (parseFloat(item.amountUSD) || 0) * exchangeRate;
+  const price = parseFloat(item.price) || 0;
+  const qty = parseFloat(item.qty) || 0;
+  const val = price * qty;
+  return acc.currency === 'USD' ? val * exchangeRate : val;
+}
+
+function getItemPurchaseKRW(acc, item) {
+  if (acc.type === 'cash' || acc.type === 'dollar') return getItemEvalKRW(acc, item);
+  const avgPrice = parseFloat(item.avgPrice) || 0;
+  const qty = parseFloat(item.qty) || 0;
+  const val = avgPrice * qty;
+  return acc.currency === 'USD' ? val * exchangeRate : val;
+}
+
+function getAccountTotal(accId) {
+  const acc = ACCOUNTS.find(a => a.id === accId);
+  return (portfolio[accId] || []).reduce((sum, item) => sum + getItemEvalKRW(acc, item), 0);
+}
+
+function getAccountPurchaseTotal(accId) {
+  const acc = ACCOUNTS.find(a => a.id === accId);
+  return (portfolio[accId] || []).reduce((sum, item) => sum + getItemPurchaseKRW(acc, item), 0);
+}
+
+// ===================================================================
+// FORMATTING
+// ===================================================================
+const fmt = n => Math.round(n).toLocaleString('ko-KR');
+const fmtKRW = n => fmt(n) + ' 원';
+const fmtPct = n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+const fmtPrice = (n, currency) => {
+  if (currency === 'USD') return '$' + parseFloat(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return fmt(n);
+};
+
+// ===================================================================
+// CHARTS
+// ===================================================================
+let categoryChart, holdingChart;
+
+function initCharts() {
+  const doughnutOpts = (cutout) => ({
+    responsive: true, maintainAspectRatio: false, cutout,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const total = ctx.dataset.data.reduce((a,b)=>a+b, 0);
+            const pct = total > 0 ? ((ctx.parsed/total)*100).toFixed(1) : 0;
+            return `${ctx.label}: ${fmtKRW(ctx.parsed)} (${pct}%)`;
+          }
+        }
+      }
+    }
+  });
+
+  categoryChart = new Chart(document.getElementById('categoryChart'), {
+    type: 'doughnut',
+    data: { labels: [], datasets: [{ data: [], backgroundColor: CATEGORY_COLORS, borderWidth: 0, hoverOffset: 8 }] },
+    options: doughnutOpts('65%')
+  });
+  holdingChart = new Chart(document.getElementById('holdingChart'), {
+    type: 'doughnut',
+    data: { labels: [], datasets: [{ data: [], backgroundColor: HOLDING_COLORS, borderWidth: 0, hoverOffset: 8 }] },
+    options: doughnutOpts('50%')
+  });
+}
+
+function updateCharts() {
+  // Category
+  const catMap = {};
+  ACCOUNTS.forEach(acc => {
+    const label = acc.name;
+    const total = getAccountTotal(acc.id);
+    if (total > 0) catMap[label] = (catMap[label] || 0) + total;
+  });
+  categoryChart.data.labels = Object.keys(catMap);
+  categoryChart.data.datasets[0].data = Object.values(catMap);
+  categoryChart.update();
+  renderLegend('categoryLegend', Object.keys(catMap), Object.values(catMap), CATEGORY_COLORS);
+
+  // Holdings
+  const hLabels = [], hData = [];
+  ACCOUNTS.forEach(acc => {
+    (portfolio[acc.id] || []).forEach(item => {
+      const val = getItemEvalKRW(acc, item);
+      if (val > 0) { hLabels.push(item.name || '미지정'); hData.push(val); }
+    });
+  });
+  holdingChart.data.labels = hLabels;
+  holdingChart.data.datasets[0].data = hData;
+  holdingChart.update();
+  renderLegend('holdingLegend', hLabels, hData, HOLDING_COLORS);
+}
+
+function renderLegend(id, labels, data, colors) {
+  const total = data.reduce((a,b) => a+b, 0);
+  document.getElementById(id).innerHTML = labels.map((l,i) =>
+    `<div class="legend-item">
+      <div class="legend-dot" style="background:${colors[i%colors.length]}"></div>
+      <span>${l}</span>
+      <span class="legend-value">${total > 0 ? ((data[i]/total)*100).toFixed(1) : 0}%</span>
+    </div>`
+  ).join('');
+}
+
+// ===================================================================
+// RENDER
+// ===================================================================
+function renderAll() {
+  // Grand totals
+  let grandEval = 0, grandPurchase = 0;
+  ACCOUNTS.forEach(acc => {
+    grandEval += getAccountTotal(acc.id);
+    grandPurchase += getAccountPurchaseTotal(acc.id);
+  });
+  document.getElementById('totalValue').textContent = fmtKRW(grandEval);
+
+  const pnl = grandEval - grandPurchase;
+  const pnlPct = grandPurchase > 0 ? (pnl / grandPurchase) * 100 : 0;
+  const pnlEl = document.getElementById('totalPnl');
+  if (grandPurchase > 0 && grandPurchase !== grandEval) {
+    const cls = pnl >= 0 ? 'positive' : 'negative';
+    pnlEl.className = `total-pnl ${cls}`;
+    pnlEl.textContent = `${pnl >= 0 ? '+' : ''}${fmt(pnl)} 원 (${fmtPct(pnlPct)})`;
+  } else {
+    pnlEl.textContent = '';
+  }
+
+  updateCharts();
+  renderAccounts();
+}
+
+function renderAccounts() {
+  const container = document.getElementById('accountsContainer');
+  container.innerHTML = '';
+  ACCOUNTS.forEach(acc => container.appendChild(createAccountCard(acc)));
+}
+
+function createAccountCard(acc) {
+  const card = document.createElement('div');
+  card.className = 'account-card';
+  const items = portfolio[acc.id] || [];
+  const evalTotal = getAccountTotal(acc.id);
+  const purchaseTotal = getAccountPurchaseTotal(acc.id);
+  const pnl = evalTotal - purchaseTotal;
+  const pnlPct = purchaseTotal > 0 ? (pnl / purchaseTotal) * 100 : 0;
+
+  let subtotalHTML = `<div class="subtotal-item">
+    <div class="subtotal-label">평가금액</div>
+    <div class="subtotal-value">${fmtKRW(evalTotal)}</div>
+  </div>`;
+
+  if (acc.type === 'stock' && purchaseTotal > 0) {
+    const cls = pnl >= 0 ? 'positive' : 'negative';
+    subtotalHTML += `<div class="subtotal-item">
+      <div class="subtotal-label">평가손익</div>
+      <div class="subtotal-value ${cls}">${pnl >= 0 ? '+' : ''}${fmt(pnl)} 원 (${fmtPct(pnlPct)})</div>
+    </div>`;
+  }
+
+  card.innerHTML = `
+    <div class="account-header" onclick="toggleSection('${acc.id}')">
+      <h3><span class="badge ${acc.badge}">${acc.name}</span> <span class="toggle-icon" id="tog-${acc.id}">▼</span></h3>
+      <div class="account-subtotal">${subtotalHTML}</div>
+    </div>
+    <div class="account-body" id="body-${acc.id}">
+      ${renderTableForAccount(acc, items)}
+      ${renderAddArea(acc)}
+    </div>`;
+  return card;
+}
+
+function renderTableForAccount(acc, items) {
+  if (items.length === 0) return '<div class="empty-state">항목을 추가해주세요</div>';
+
+  if (acc.type === 'cash') {
+    return `<table><thead><tr>
+      <th style="text-align:left">항목</th><th>금액 (원)</th><th width="40"></th>
+    </tr></thead><tbody>${items.map((item, i) => `<tr>
+      <td>${item.name}</td>
+      <td><input class="cell-edit" type="number" value="${item.amount||0}"
+        onchange="updateField('${acc.id}',${i},'amount',this.value)"></td>
+      <td><button class="btn-icon" onclick="removeItem('${acc.id}',${i})">×</button></td>
+    </tr>`).join('')}</tbody></table>`;
+  }
+
+  if (acc.type === 'dollar') {
+    return `<table><thead><tr>
+      <th style="text-align:left">항목</th><th>달러 ($)</th><th>원화 환산</th><th width="40"></th>
+    </tr></thead><tbody>${items.map((item, i) => {
+      const usd = parseFloat(item.amountUSD) || 0;
+      return `<tr>
+        <td>${item.name}</td>
+        <td><input class="cell-edit" type="number" step="0.01" value="${item.amountUSD||0}"
+          onchange="updateField('${acc.id}',${i},'amountUSD',this.value)"></td>
+        <td>${fmtKRW(usd * exchangeRate)}</td>
+        <td><button class="btn-icon" onclick="removeItem('${acc.id}',${i})">×</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+  }
+
+  // Stock type
+  const isUSD = acc.currency === 'USD';
+  return `<table><thead><tr>
+    <th style="text-align:left">종목명</th>
+    <th>현재가${isUSD?' ($)':''}</th>
+    <th>전일대비</th>
+    <th>보유수량</th>
+    <th>평가금액${isUSD?' (원)':''}</th>
+    <th>평균단가</th>
+    <th>매입금액</th>
+    <th>평가손익</th>
+    <th>수익률</th>
+    <th width="60"></th>
+  </tr></thead><tbody>${items.map((item, i) => {
+    const price = parseFloat(item.price) || 0;
+    const qty = parseFloat(item.qty) || 0;
+    const avgPrice = parseFloat(item.avgPrice) || 0;
+    const prevClose = parseFloat(item.previousClose) || price;
+    const change = price - prevClose;
+    const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+    const evalAmt = price * qty;
+    const purchaseAmt = avgPrice * qty;
+    const evalKRW = isUSD ? evalAmt * exchangeRate : evalAmt;
+    const purchaseKRW = isUSD ? purchaseAmt * exchangeRate : purchaseAmt;
+    const pnl = evalKRW - purchaseKRW;
+    const pnlPct = purchaseKRW > 0 ? (pnl / purchaseKRW) * 100 : 0;
+    const pnlCls = pnl >= 0 ? 'positive' : 'negative';
+    const chgCls = change >= 0 ? 'positive' : 'negative';
+
+    return `<tr>
+      <td>${item.name}${item.symbol ? `<br><span style="font-size:11px;color:var(--text-muted)">${item.symbol}</span>` : ''}</td>
+      <td>${fmtPrice(price, isUSD?'USD':'KRW')}</td>
+      <td class="${chgCls}">${change >= 0 ? '+' : ''}${isUSD ? change.toFixed(2) : fmt(change)} (${fmtPct(changePct)})</td>
+      <td><input class="cell-edit" type="number" value="${qty}" style="width:80px"
+        onchange="updateField('${acc.id}',${i},'qty',this.value)"></td>
+      <td>${fmtKRW(evalKRW)}</td>
+      <td><input class="cell-edit" type="number" value="${avgPrice}" ${isUSD?'step="0.01"':''}
+        onchange="updateField('${acc.id}',${i},'avgPrice',this.value)"></td>
+      <td>${isUSD ? fmtKRW(purchaseKRW) : fmt(purchaseAmt)}</td>
+      <td class="${pnlCls}">${pnl >= 0?'+':''}${fmt(pnl)}</td>
+      <td class="${pnlCls}">${fmtPct(pnlPct)}</td>
+      <td>
+        <button class="btn-refresh" onclick="refreshSingle('${acc.id}',${i})" title="시세 새로고침">↻</button>
+        <button class="btn-icon" onclick="removeItem('${acc.id}',${i})">×</button>
+      </td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function renderAddArea(acc) {
+  if (acc.type === 'cash') {
+    return `<div class="add-area">
+      <input class="add-input" type="text" id="add-${acc.id}-name" placeholder="항목명" style="text-align:left;width:160px">
+      <input class="add-input" type="number" id="add-${acc.id}-amount" placeholder="금액 (원)">
+      <button class="btn btn-sm" onclick="addCashItem('${acc.id}')">추가</button>
+    </div>`;
+  }
+  if (acc.type === 'dollar') {
+    return `<div class="add-area">
+      <input class="add-input" type="text" id="add-${acc.id}-name" placeholder="항목명" style="text-align:left;width:160px">
+      <input class="add-input" type="number" id="add-${acc.id}-usd" placeholder="달러 ($)" step="0.01">
+      <button class="btn btn-sm" onclick="addDollarItem('${acc.id}')">추가</button>
+    </div>`;
+  }
+  // Stock
+  return `<div class="add-area">
+    <div class="search-wrap">
+      <input class="search-input" type="text" id="search-${acc.id}"
+        placeholder="종목명 검색 (예: 삼성전자, AAPL)"
+        oninput="onSearchInput('${acc.id}', this.value)"
+        onfocus="onSearchInput('${acc.id}', this.value)"
+        autocomplete="off">
+      <div class="search-results" id="results-${acc.id}"></div>
+    </div>
+    <input class="add-input" type="number" id="add-${acc.id}-qty" placeholder="수량">
+    <input class="add-input" type="number" id="add-${acc.id}-avg" placeholder="평균단가" ${acc.currency==='USD'?'step="0.01"':''}>
+    <button class="btn btn-sm" id="addbtn-${acc.id}" onclick="addStockItem('${acc.id}')">추가</button>
+    <span id="search-status-${acc.id}" style="font-size:12px;color:var(--text-muted)"></span>
+  </div>`;
+}
+
+// ===================================================================
+// SEARCH UI
+// ===================================================================
+let selectedStock = {}; // per account
+
+function onSearchInput(accId, query) {
+  clearTimeout(searchTimeout);
+  const resultsEl = document.getElementById(`results-${accId}`);
+
+  if (query.length < 1) { resultsEl.classList.remove('show'); return; }
+
+  searchTimeout = setTimeout(async () => {
+    const statusEl = document.getElementById(`search-status-${accId}`);
+    statusEl.innerHTML = '<span class="loading-spinner"></span>';
+    const results = await searchStock(query);
+    statusEl.textContent = '';
+
+    if (results.length === 0) {
+      resultsEl.innerHTML = '<div class="search-result-item" style="color:var(--text-muted)">검색 결과가 없습니다</div>';
+      resultsEl.classList.add('show');
+      return;
+    }
+
+    resultsEl.innerHTML = results.map(r =>
+      `<div class="search-result-item" onclick="selectStock('${accId}', '${r.symbol}', \`${r.name.replace(/`/g,"'")}\`, '${r.exchange}')">
+        <div>
+          <span class="sr-name">${r.name}</span>
+          <span class="sr-exchange">${r.exchange}</span>
+        </div>
+        <span class="sr-ticker">${r.symbol}</span>
+      </div>`
+    ).join('');
+    resultsEl.classList.add('show');
+  }, 300);
+}
+
+async function selectStock(accId, symbol, name, exchange) {
+  const searchInput = document.getElementById(`search-${accId}`);
+  const resultsEl = document.getElementById(`results-${accId}`);
+  const statusEl = document.getElementById(`search-status-${accId}`);
+
+  searchInput.value = name;
+  resultsEl.classList.remove('show');
+  statusEl.innerHTML = '<span class="loading-spinner"></span> 시세 조회중...';
+
+  const priceData = await fetchStockPrice(symbol);
+  selectedStock[accId] = { symbol, name, exchange };
+
+  if (priceData) {
+    selectedStock[accId].price = priceData.price;
+    selectedStock[accId].previousClose = priceData.previousClose;
+    selectedStock[accId].currency = priceData.currency;
+    statusEl.innerHTML = `<span style="color:var(--green)">✓</span> 현재가: ${fmtPrice(priceData.price, priceData.currency)}`;
+  } else {
+    statusEl.innerHTML = `<span style="color:var(--yellow)">!</span> 시세 조회 실패 - 수동 입력 필요`;
+  }
+}
+
+// Close search results when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrap')) {
+    document.querySelectorAll('.search-results').forEach(el => el.classList.remove('show'));
+  }
+});
+
+// ===================================================================
+// ADD / UPDATE / REMOVE
+// ===================================================================
+function addCashItem(accId) {
+  const name = document.getElementById(`add-${accId}-name`).value || '현금';
+  const amount = document.getElementById(`add-${accId}-amount`).value || '0';
+  portfolio[accId].push({ name, amount });
+  saveData(); renderAll();
+}
+
+function addDollarItem(accId) {
+  const name = document.getElementById(`add-${accId}-name`).value || '달러';
+  const amountUSD = document.getElementById(`add-${accId}-usd`).value || '0';
+  portfolio[accId].push({ name, amountUSD });
+  saveData(); renderAll();
+}
+
+async function addStockItem(accId) {
+  const acc = ACCOUNTS.find(a => a.id === accId);
+  const searchInput = document.getElementById(`search-${accId}`);
+  const qtyInput = document.getElementById(`add-${accId}-qty`);
+  const avgInput = document.getElementById(`add-${accId}-avg`);
+
+  const sel = selectedStock[accId];
+  const name = searchInput.value.trim();
+  if (!name) { showToast('종목명을 입력해주세요'); return; }
+
+  const item = {
+    name: sel?.name || name,
+    symbol: sel?.symbol || '',
+    qty: qtyInput.value || '0',
+    avgPrice: avgInput.value || '0',
+    price: sel?.price || 0,
+    previousClose: sel?.previousClose || 0,
+  };
+
+  // If no price yet and we have a symbol, try to fetch
+  if (!item.price && item.symbol) {
+    const data = await fetchStockPrice(item.symbol);
+    if (data) {
+      item.price = data.price;
+      item.previousClose = data.previousClose;
+    }
+  }
+
+  portfolio[accId].push(item);
+  selectedStock[accId] = null;
+  searchInput.value = '';
+  qtyInput.value = '';
+  avgInput.value = '';
+  document.getElementById(`search-status-${accId}`).textContent = '';
+
+  saveData(); renderAll();
+  showToast(`${item.name} 추가 완료`);
+}
+
+function updateField(accId, index, field, value) {
+  portfolio[accId][index][field] = value;
+  saveData(); renderAll();
+}
+
+function removeItem(accId, index) {
+  const name = portfolio[accId][index]?.name || '';
+  portfolio[accId].splice(index, 1);
+  saveData(); renderAll();
+  showToast(`${name} 삭제됨`);
+}
+
+async function refreshSingle(accId, index) {
+  const item = portfolio[accId][index];
+  if (!item?.symbol) { showToast('종목 심볼이 없어 조회할 수 없습니다'); return; }
+
+  const data = await fetchStockPrice(item.symbol);
+  if (data) {
+    item.price = data.price;
+    item.previousClose = data.previousClose;
+    saveData(); renderAll();
+    showToast(`${item.name} 시세 업데이트`);
+  } else {
+    showToast('시세 조회 실패');
+  }
+}
+
+function toggleSection(accId) {
+  const body = document.getElementById(`body-${accId}`);
+  const tog = document.getElementById(`tog-${accId}`);
+  body.classList.toggle('collapsed');
+  tog.closest('.account-header').classList.toggle('collapsed');
+}
+
+// ===================================================================
+// PERSISTENCE
+// ===================================================================
+function saveData() {
+  localStorage.setItem('portfolio_v2', JSON.stringify(portfolio));
+  localStorage.setItem('portfolio_exchange_rate', exchangeRate.toString());
+}
+
+function loadData() {
+  try {
+    const saved = localStorage.getItem('portfolio_v2');
+    if (saved) portfolio = JSON.parse(saved);
+    const rate = localStorage.getItem('portfolio_exchange_rate');
+    if (rate) exchangeRate = parseFloat(rate);
+  } catch(e) { console.warn('Load failed', e); }
+}
+
+function exportJSON() {
+  const blob = new Blob([JSON.stringify({
+    version: 2, data: portfolio, exchangeRate,
+    exportDate: new Date().toISOString()
+  }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `portfolio_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  showToast('내보내기 완료');
+}
+
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      portfolio = imported.data || imported;
+      if (imported.exchangeRate) exchangeRate = imported.exchangeRate;
+      ACCOUNTS.forEach(a => { if (!portfolio[a.id]) portfolio[a.id] = []; });
+      saveData(); renderAll();
+      showToast('데이터 불러오기 완료');
+    } catch(err) { showToast('파일을 읽을 수 없습니다'); }
+  };
+  reader.readAsText(file);
+}
+
+// ===================================================================
+// TOAST
+// ===================================================================
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// GO
+init();
+</script>
+</body>
+</html>
