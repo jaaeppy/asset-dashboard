@@ -126,11 +126,11 @@
     .search-input:focus { border-color: var(--accent); }
     .search-input::placeholder { color: var(--text-muted); }
     .search-results {
-      position: absolute; top: 100%; left: 0; right: 0;
+      position: absolute; bottom: 100%; left: 0; right: 0;
       background: #1e2130; border: 1px solid var(--border);
-      border-radius: 8px; margin-top: 4px; max-height: 240px;
+      border-radius: 8px; margin-bottom: 4px; max-height: 280px;
       overflow-y: auto; z-index: 100; display: none;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      box-shadow: 0 -8px 32px rgba(0,0,0,0.4);
     }
     .search-results.show { display: block; }
     .search-result-item {
