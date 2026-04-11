@@ -350,75 +350,66 @@ async function fetchExchangeRate() {
 // ===================================================================
 function hasKorean(str) { return /[가-힣]/.test(str); }
 
-function parseYahooResults(quotes) {
-  return quotes
-    .filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF')
-    .map(q => {
-      const sym = q.symbol || '';
-      const isKR = sym.endsWith('.KS') || sym.endsWith('.KQ');
-      const code = isKR ? sym.slice(0, -3) : '';
-      const market = sym.endsWith('.KS') ? 'KOSPI' : sym.endsWith('.KQ') ? 'KOSDAQ' : (q.exchDisp || q.exchange || '');
-      return {
-        symbol: sym,
-        symbolAlt: sym.endsWith('.KS') ? sym.replace('.KS','.KQ') : sym.endsWith('.KQ') ? sym.replace('.KQ','.KS') : '',
-        name: q.shortname || q.longname || sym,
-        exchange: market,
-        type: q.quoteType,
-        code
-      };
-    });
+// 한국 주식 DB (로컬)
+let krStocksDB = null;
+async function loadKrDB() {
+  if (krStocksDB) return krStocksDB;
+  try {
+    const r = await fetch('./stocks_kr.json');
+    krStocksDB = await r.json();
+  } catch(e) { krStocksDB = []; }
+  return krStocksDB;
+}
+
+function searchKrDB(query, db) {
+  const q = query.trim().toLowerCase();
+  // 정확히 시작하는 것 우선, 그 다음 포함되는 것
+  const starts = db.filter(s => s.name.toLowerCase().startsWith(q));
+  const contains = db.filter(s => !s.name.toLowerCase().startsWith(q) && s.name.toLowerCase().includes(q));
+  return [...starts, ...contains].slice(0, 8).map(s => ({
+    symbol: s.symbol,
+    symbolAlt: s.symbol.endsWith('.KS') ? s.symbol.replace('.KS','.KQ') : s.symbol.replace('.KQ','.KS'),
+    name: s.name,
+    exchange: s.market,
+    type: s.market === 'ETF' ? 'ETF' : 'EQUITY',
+    code: s.symbol.slice(0, 6)
+  }));
 }
 
 async function searchStock(query) {
   if (!query || query.length < 1) return [];
 
-  // Yahoo Finance works for both Korean AND English — use as primary
+  // 한글 → 로컬 DB에서 검색
+  if (hasKorean(query)) {
+    const db = await loadKrDB();
+    const results = searchKrDB(query, db);
+    if (results.length > 0) return results;
+  }
+
+  // 영문 / 티커 → Yahoo Finance
   try {
-    const yahooUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&listsCount=0&lang=ko-KR`;
+    const yahooUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&listsCount=0`;
     const res = await corsFetch(yahooUrl);
     if (res) {
       const data = await res.json();
       if (data.quotes?.length > 0) {
-        const results = parseYahooResults(data.quotes);
-        if (results.length > 0) return results;
+        return data.quotes
+          .filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF')
+          .map(q => {
+            const sym = q.symbol || '';
+            const market = sym.endsWith('.KS') ? 'KOSPI' : sym.endsWith('.KQ') ? 'KOSDAQ' : (q.exchDisp || q.exchange || '');
+            return {
+              symbol: sym,
+              symbolAlt: sym.endsWith('.KS') ? sym.replace('.KS','.KQ') : sym.endsWith('.KQ') ? sym.replace('.KQ','.KS') : '',
+              name: q.shortname || q.longname || sym,
+              exchange: market,
+              type: q.quoteType,
+              code: (sym.endsWith('.KS') || sym.endsWith('.KQ')) ? sym.slice(0,6) : ''
+            };
+          });
       }
     }
   } catch(e) { console.warn('Yahoo search failed', e); }
-
-  // Korean fallback → NAVER Finance search
-  if (hasKorean(query)) {
-    try {
-      const naverUrl = `https://finance.naver.com/search/searchList.naver?query=${encodeURIComponent(query)}`;
-      const res = await corsFetch(naverUrl);
-      if (res) {
-        const html = await res.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const rows = doc.querySelectorAll('table.tbl_search tbody tr');
-        const results = [];
-        rows.forEach(row => {
-          const nameEl = row.querySelector('td.tit a');
-          const href = nameEl?.getAttribute('href') || '';
-          const match = href.match(/code=(\d{6})/);
-          if (match && nameEl) {
-            const code = match[1];
-            const marketEl = row.querySelector('td:nth-child(3)');
-            const market = marketEl?.textContent?.trim() || '';
-            const isKospi = market.includes('KOSPI') || market.includes('코스피');
-            results.push({
-              symbol: code + (isKospi ? '.KS' : '.KQ'),
-              symbolAlt: code + (isKospi ? '.KQ' : '.KS'),
-              name: nameEl.textContent.trim(),
-              exchange: isKospi ? 'KOSPI' : 'KOSDAQ',
-              type: 'EQUITY',
-              code
-            });
-          }
-        });
-        if (results.length > 0) return results.slice(0, 8);
-      }
-    } catch(e) { console.warn('NAVER search failed', e); }
-  }
 
   return [];
 }
