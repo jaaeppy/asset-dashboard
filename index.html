@@ -551,6 +551,28 @@ const fmtPrice = (n, currency) => {
   return fmt(n);
 };
 
+// 숫자 입력 포맷 (쉼표 표시)
+const stripCommas = v => String(v).replace(/,/g, '');
+const parseNum = v => parseFloat(stripCommas(v)) || 0;
+const fmtInput = (v, isFloat) => {
+  const n = parseNum(v);
+  if (!n) return '';
+  return isFloat ? n.toLocaleString('ko-KR', {minimumFractionDigits:2, maximumFractionDigits:4}) : n.toLocaleString('ko-KR');
+};
+function focusNum(el) { el.value = stripCommas(el.value); }
+function blurNum(el, accId, idx, field, isFloat) {
+  const raw = parseNum(el.value);
+  el.value = raw ? fmtInput(raw, isFloat) : '';
+  updateField(accId, idx, field, raw);
+}
+function makeNumInput(value, accId, idx, field, isFloat, style) {
+  const display = value ? fmtInput(value, isFloat) : '';
+  return `<input class="cell-edit" type="text" inputmode="decimal" value="${display}" ${style||''}
+    onfocus="focusNum(this)"
+    onblur="blurNum(this,'${accId}',${idx},'${field}',${!!isFloat})"
+    onkeydown="if(event.key==='Enter')this.blur()">`;
+}
+
 // ===================================================================
 // CHARTS
 // ===================================================================
@@ -698,8 +720,7 @@ function renderTableForAccount(acc, items) {
       <th style="text-align:left">항목</th><th>금액 (원)</th><th width="40"></th>
     </tr></thead><tbody>${items.map((item, i) => `<tr>
       <td>${item.name}</td>
-      <td><input class="cell-edit" type="number" value="${item.amount||0}"
-        onchange="updateField('${acc.id}',${i},'amount',this.value)"></td>
+      <td>${makeNumInput(item.amount||0, acc.id, i, 'amount', false)}</td>
       <td><button class="btn-icon" onclick="removeItem('${acc.id}',${i})">×</button></td>
     </tr>`).join('')}</tbody></table>`;
   }
@@ -711,8 +732,7 @@ function renderTableForAccount(acc, items) {
       const usd = parseFloat(item.amountUSD) || 0;
       return `<tr>
         <td>${item.name}</td>
-        <td><input class="cell-edit" type="number" step="0.01" value="${item.amountUSD||0}"
-          onchange="updateField('${acc.id}',${i},'amountUSD',this.value)"></td>
+        <td>${makeNumInput(item.amountUSD||0, acc.id, i, 'amountUSD', true)}</td>
         <td>${fmtKRW(usd * exchangeRate)}</td>
         <td><button class="btn-icon" onclick="removeItem('${acc.id}',${i})">×</button></td>
       </tr>`;
@@ -752,11 +772,9 @@ function renderTableForAccount(acc, items) {
       <td>${item.name}${item.symbol ? `<br><span style="font-size:11px;color:var(--text-muted)">${item.symbol}</span>` : ''}</td>
       <td>${fmtPrice(price, isUSD?'USD':'KRW')}</td>
       <td class="${chgCls}">${change >= 0 ? '+' : ''}${isUSD ? change.toFixed(2) : fmt(change)} (${fmtPct(changePct)})</td>
-      <td><input class="cell-edit" type="number" value="${qty}" style="width:80px"
-        onchange="updateField('${acc.id}',${i},'qty',this.value)"></td>
+      <td>${makeNumInput(qty, acc.id, i, 'qty', false, 'style="width:80px"')}</td>
       <td>${fmtKRW(evalKRW)}</td>
-      <td><input class="cell-edit" type="number" value="${avgPrice}" ${isUSD?'step="0.01"':''}
-        onchange="updateField('${acc.id}',${i},'avgPrice',this.value)"></td>
+      <td>${makeNumInput(avgPrice, acc.id, i, 'avgPrice', isUSD, '')}</td>
       <td>${isUSD ? fmtKRW(purchaseKRW) : fmt(purchaseAmt)}</td>
       <td class="${pnlCls}">${pnl >= 0?'+':''}${fmt(pnl)}</td>
       <td class="${pnlCls}">${fmtPct(pnlPct)}</td>
@@ -772,14 +790,16 @@ function renderAddArea(acc) {
   if (acc.type === 'cash') {
     return `<div class="add-area">
       <input class="add-input" type="text" id="add-${acc.id}-name" placeholder="항목명" style="text-align:left;width:160px">
-      <input class="add-input" type="number" id="add-${acc.id}-amount" placeholder="금액 (원)">
+      <input class="add-input" type="text" inputmode="decimal" id="add-${acc.id}-amount" placeholder="금액 (원)"
+        onfocus="focusNum(this)" onblur="this.value=this.value?fmtInput(parseNum(this.value),false):''">
       <button class="btn btn-sm" onclick="addCashItem('${acc.id}')">추가</button>
     </div>`;
   }
   if (acc.type === 'dollar') {
     return `<div class="add-area">
       <input class="add-input" type="text" id="add-${acc.id}-name" placeholder="항목명" style="text-align:left;width:160px">
-      <input class="add-input" type="number" id="add-${acc.id}-usd" placeholder="달러 ($)" step="0.01">
+      <input class="add-input" type="text" inputmode="decimal" id="add-${acc.id}-usd" placeholder="달러 ($)"
+        onfocus="focusNum(this)" onblur="this.value=this.value?fmtInput(parseNum(this.value),true):''">
       <button class="btn btn-sm" onclick="addDollarItem('${acc.id}')">추가</button>
     </div>`;
   }
@@ -794,8 +814,10 @@ function renderAddArea(acc) {
         autocomplete="off">
       <div class="search-results" id="results-${acc.id}"></div>
     </div>
-    <input class="add-input" type="number" id="add-${acc.id}-qty" placeholder="수량">
-    <input class="add-input" type="number" id="add-${acc.id}-avg" placeholder="평균단가" ${acc.currency==='USD'?'step="0.01"':''}>
+    <input class="add-input" type="text" inputmode="decimal" id="add-${acc.id}-qty" placeholder="수량"
+      onfocus="focusNum(this)" onblur="this.value=this.value?fmtInput(parseNum(this.value),false):''">
+    <input class="add-input" type="text" inputmode="decimal" id="add-${acc.id}-avg" placeholder="평균단가"
+      onfocus="focusNum(this)" onblur="this.value=this.value?fmtInput(parseNum(this.value),${acc.currency==='USD'}):''">
     <button class="btn btn-sm" id="addbtn-${acc.id}" onclick="addStockItem('${acc.id}')">추가</button>
     <span id="search-status-${acc.id}" style="font-size:12px;color:var(--text-muted)"></span>
   </div>`;
@@ -976,14 +998,14 @@ document.addEventListener('click', e => {
 // ===================================================================
 function addCashItem(accId) {
   const name = document.getElementById(`add-${accId}-name`).value || '현금';
-  const amount = document.getElementById(`add-${accId}-amount`).value || '0';
+  const amount = parseNum(document.getElementById(`add-${accId}-amount`).value);
   portfolio[accId].push({ name, amount });
   saveData(); renderAll();
 }
 
 function addDollarItem(accId) {
   const name = document.getElementById(`add-${accId}-name`).value || '달러';
-  const amountUSD = document.getElementById(`add-${accId}-usd`).value || '0';
+  const amountUSD = parseNum(document.getElementById(`add-${accId}-usd`).value);
   portfolio[accId].push({ name, amountUSD });
   saveData(); renderAll();
 }
@@ -1001,8 +1023,8 @@ async function addStockItem(accId) {
   const item = {
     name: sel?.name || name,
     symbol: sel?.symbol || '',
-    qty: qtyInput.value || '0',
-    avgPrice: avgInput.value || '0',
+    qty: parseNum(qtyInput.value) || 0,
+    avgPrice: parseNum(avgInput.value) || 0,
     price: sel?.price || 0,
     previousClose: sel?.previousClose || 0,
   };
