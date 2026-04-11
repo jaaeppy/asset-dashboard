@@ -126,11 +126,11 @@
     .search-input:focus { border-color: var(--accent); }
     .search-input::placeholder { color: var(--text-muted); }
     .search-results {
-      position: absolute; bottom: 100%; left: 0; width: 380px;
+      position: fixed; width: 380px;
       background: #1e2130; border: 1px solid var(--accent);
-      border-radius: 10px; margin-bottom: 6px;
-      overflow-y: auto; z-index: 100; display: none;
-      box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
+      border-radius: 10px; overflow-y: auto;
+      z-index: 9999; display: none;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.7);
     }
     .search-results.show { display: block; }
     .search-result-item {
@@ -345,81 +345,76 @@ async function fetchExchangeRate() {
 // ===================================================================
 function hasKorean(str) { return /[가-힣]/.test(str); }
 
+function parseYahooResults(quotes) {
+  return quotes
+    .filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF')
+    .map(q => {
+      const sym = q.symbol || '';
+      const isKR = sym.endsWith('.KS') || sym.endsWith('.KQ');
+      const code = isKR ? sym.slice(0, -3) : '';
+      const market = sym.endsWith('.KS') ? 'KOSPI' : sym.endsWith('.KQ') ? 'KOSDAQ' : (q.exchDisp || q.exchange || '');
+      return {
+        symbol: sym,
+        symbolAlt: sym.endsWith('.KS') ? sym.replace('.KS','.KQ') : sym.endsWith('.KQ') ? sym.replace('.KQ','.KS') : '',
+        name: q.shortname || q.longname || sym,
+        exchange: market,
+        type: q.quoteType,
+        code
+      };
+    });
+}
+
 async function searchStock(query) {
   if (!query || query.length < 1) return [];
 
-  if (hasKorean(query)) {
-    // Korean → NAVER mobile stock search API
-    try {
-      const naverUrl = `https://m.stock.naver.com/front-api/search/totalSearch?keyword=${encodeURIComponent(query)}`;
-      const res = await corsFetch(naverUrl);
-      if (res) {
-        const data = await res.json();
-        const stocks = data?.result?.stock?.items || [];
-        const etfs = data?.result?.etf?.items || [];
-        const all = [...stocks, ...etfs].slice(0, 8);
-        const results = all.map(item => {
-          const code = item.code || item.itemCode || '';
-          const market = item.stockExchangeType?.code || item.marketType || '';
-          const isKospi = market === 'KOSPI' || market === 'kospi';
-          const isEtf = !!(item.etfBasicInfo || etfs.includes(item));
-          return {
-            symbol: code + (isKospi ? '.KS' : '.KQ'),
-            symbolAlt: code + (isKospi ? '.KQ' : '.KS'),
-            name: item.name || item.stockName || code,
-            exchange: market || 'KRX',
-            type: isEtf ? 'ETF' : 'EQUITY',
-            code
-          };
-        }).filter(r => r.code);
-        if (results.length > 0) return results;
-      }
-    } catch(e) { console.warn('NAVER search failed', e); }
-
-    // Fallback: NAVER AC autocomplete
-    try {
-      const acUrl = `https://ac.finance.naver.com/ac?q=${encodeURIComponent(query)}&q_enc=utf-8&t_koreng=1&st=111&r_lt=111`;
-      const res = await corsFetch(acUrl);
-      if (res) {
-        const text = await res.text();
-        // handle both JSON and JSONP
-        const jsonStr = text.startsWith('ac.run(') ? text.slice(7, -1) : text;
-        const data = JSON.parse(jsonStr);
-        const items = data.items || [];
-        // format: [[names...], [codes...]] or [[name,code], ...]
-        const names = Array.isArray(items[0]) ? items[0] : [];
-        const codes = Array.isArray(items[1]) ? items[1] : [];
-        const results = [];
-        for (let i = 0; i < names.length && i < 8; i++) {
-          const name = Array.isArray(names[i]) ? names[i][0] : names[i];
-          const code = Array.isArray(codes[i]) ? codes[i][0] : codes[i];
-          if (code && /^\d{6}$/.test(code)) {
-            results.push({ symbol: code + '.KS', symbolAlt: code + '.KQ', name, exchange: 'KRX', type: 'EQUITY', code });
-          }
-        }
-        if (results.length > 0) return results;
-      }
-    } catch(e) { console.warn('NAVER AC failed', e); }
-  }
-
-  // English / fallback → Yahoo Finance
+  // Yahoo Finance works for both Korean AND English — use as primary
   try {
-    const yahooUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&listsCount=0`;
+    const yahooUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&listsCount=0&lang=ko-KR`;
     const res = await corsFetch(yahooUrl);
-    if (!res) return [];
-    const data = await res.json();
-    if (data.quotes) {
-      return data.quotes
-        .filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF')
-        .map(q => ({
-          symbol: q.symbol,
-          name: q.shortname || q.longname || q.symbol,
-          exchange: q.exchDisp || q.exchange || '',
-          type: q.quoteType,
-          code: ''
-        }));
+    if (res) {
+      const data = await res.json();
+      if (data.quotes?.length > 0) {
+        const results = parseYahooResults(data.quotes);
+        if (results.length > 0) return results;
+      }
     }
   } catch(e) { console.warn('Yahoo search failed', e); }
+
+  // Korean fallback → NAVER Finance search
+  if (hasKorean(query)) {
+    try {
+      const naverUrl = `https://finance.naver.com/search/searchList.naver?query=${encodeURIComponent(query)}`;
+      const res = await corsFetch(naverUrl);
+      if (res) {
+        const html = await res.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const rows = doc.querySelectorAll('table.tbl_search tbody tr');
+        const results = [];
+        rows.forEach(row => {
+          const nameEl = row.querySelector('td.tit a');
+          const href = nameEl?.getAttribute('href') || '';
+          const match = href.match(/code=(\d{6})/);
+          if (match && nameEl) {
+            const code = match[1];
+            const marketEl = row.querySelector('td:nth-child(3)');
+            const market = marketEl?.textContent?.trim() || '';
+            const isKospi = market.includes('KOSPI') || market.includes('코스피');
+            results.push({
+              symbol: code + (isKospi ? '.KS' : '.KQ'),
+              symbolAlt: code + (isKospi ? '.KQ' : '.KS'),
+              name: nameEl.textContent.trim(),
+              exchange: isKospi ? 'KOSPI' : 'KOSDAQ',
+              type: 'EQUITY',
+              code
+            });
+          }
+        });
+        if (results.length > 0) return results.slice(0, 8);
+      }
+    } catch(e) { console.warn('NAVER search failed', e); }
+  }
+
   return [];
 }
 
@@ -832,25 +827,44 @@ function getMarketBadge(r) {
   return `<span class="sr-market us">${ex || 'US'}</span>`;
 }
 
+function positionDropdown(accId) {
+  const inputEl = document.getElementById(`search-${accId}`);
+  const resultsEl = document.getElementById(`results-${accId}`);
+  if (!inputEl || !resultsEl) return;
+
+  const rect = inputEl.getBoundingClientRect();
+  const itemHeight = 52;
+  const visibleCount = Math.min(5, (searchResults[accId] || []).length || 1);
+  const dropH = itemHeight * visibleCount;
+
+  // Show above or below based on available space
+  const spaceAbove = rect.top;
+  const spaceBelow = window.innerHeight - rect.bottom;
+
+  if (spaceAbove > dropH + 8 || spaceAbove > spaceBelow) {
+    // show above
+    resultsEl.style.top = (rect.top - dropH - 6) + 'px';
+  } else {
+    // show below
+    resultsEl.style.top = (rect.bottom + 6) + 'px';
+  }
+  resultsEl.style.left = rect.left + 'px';
+  resultsEl.style.height = dropH + 'px';
+}
+
 function renderSearchResults(accId) {
   const resultsEl = document.getElementById(`results-${accId}`);
   const results = searchResults[accId] || [];
   const activeIdx = searchActiveIdx[accId] ?? -1;
 
   if (results.length === 0) {
-    resultsEl.innerHTML = `<div class="search-result-item" style="color:var(--text-muted);cursor:default;justify-content:center">
-      검색 결과가 없습니다</div>`;
+    resultsEl.innerHTML = `<div class="search-result-item" style="color:var(--text-muted);cursor:default;justify-content:center">검색 결과가 없습니다</div>`;
+    positionDropdown(accId);
     resultsEl.classList.add('show');
     return;
   }
 
-  // Always show 5 items worth of height
-  const itemHeight = 52;
-  const visibleCount = Math.min(5, results.length);
-  resultsEl.style.height = (itemHeight * visibleCount) + 'px';
-
   resultsEl.innerHTML = results.map((r, i) => {
-    // safely encode for inline onclick
     const nameEsc = r.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     const altSym = r.symbolAlt || '';
     return `<div class="search-result-item${i === activeIdx ? ' active' : ''}"
@@ -868,6 +882,8 @@ function renderSearchResults(accId) {
       </div>
     </div>`;
   }).join('');
+
+  positionDropdown(accId);
   resultsEl.classList.add('show');
 }
 
