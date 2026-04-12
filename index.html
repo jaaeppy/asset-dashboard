@@ -5,6 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>자산관리 대시보드</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDgeY6qfKMNPcpHhv1hzPaTV6-KGUfzYX8",
+      authDomain: "asset-dashboard-8931b.firebaseapp.com",
+      databaseURL: "https://asset-dashboard-8931b-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "asset-dashboard-8931b",
+      storageBucket: "asset-dashboard-8931b.firebasestorage.app",
+      messagingSenderId: "208488426896",
+      appId: "1:208488426896:web:66936fe1a9b2a1e7955715"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // 전역에 Firebase 함수 노출
+    window._fbSet = (path, value) => set(ref(db, path), value);
+    window._fbOnValue = (path, cb) => onValue(ref(db, path), cb);
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -329,6 +350,8 @@ let searchActiveIdx = {}; // active index per accId
 // ===================================================================
 // INIT
 // ===================================================================
+let _fbListening = false;
+
 function init() {
   const now = new Date();
   document.getElementById('currentDate').textContent =
@@ -339,6 +362,26 @@ function init() {
   initCharts();
   fetchExchangeRate();
   renderAll();
+
+  // Firebase 실시간 동기화 — SDK가 로드되면 리스너 등록
+  const tryFirebase = () => {
+    if (window._fbOnValue && !_fbListening) {
+      _fbListening = true;
+      window._fbOnValue('portfolio', snapshot => {
+        const data = snapshot.val();
+        if (data) {
+          portfolio = data;
+          ACCOUNTS.forEach(a => { if (!portfolio[a.id]) portfolio[a.id] = []; });
+          // 로컬 백업 업데이트
+          try { localStorage.setItem('portfolio_v2', JSON.stringify(portfolio)); } catch(e) {}
+          renderAll();
+        }
+      });
+    } else if (!window._fbOnValue) {
+      setTimeout(tryFirebase, 300);
+    }
+  };
+  setTimeout(tryFirebase, 300);
 }
 
 // ===================================================================
@@ -1095,11 +1138,18 @@ function toggleSection(accId) {
 // PERSISTENCE
 // ===================================================================
 function saveData() {
-  localStorage.setItem('portfolio_v2', JSON.stringify(portfolio));
-  localStorage.setItem('portfolio_exchange_rate', exchangeRate.toString());
+  // Firebase에 저장 (비동기, 에러 무시)
+  if (window._fbSet) {
+    window._fbSet('portfolio', portfolio).catch(e => console.warn('Firebase save error', e));
+  }
+  // 로컬에도 백업
+  try {
+    localStorage.setItem('portfolio_v2', JSON.stringify(portfolio));
+  } catch(e) {}
 }
 
 function loadData() {
+  // localStorage 백업에서 먼저 로드 (Firebase 연결 전 빈 화면 방지)
   try {
     const saved = localStorage.getItem('portfolio_v2');
     if (saved) portfolio = JSON.parse(saved);
