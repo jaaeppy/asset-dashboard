@@ -46,7 +46,7 @@
   {"name":"APR","symbol":"278470.KS","market":"KOSPI"},
   {"name":"효성중공업","symbol":"298040.KS","market":"KOSPI"},
   {"name":"ABL바이오","symbol":"298380.KS","market":"KOSPI"},
-  {"name":"스피어","symbol":"347700.KS","market":"KOSPI"},
+  {"name":"스피어","symbol":"347700.KQ","market":"KOSDAQ"},
   {"name":"DND파마텍","symbol":"347850.KS","market":"KOSPI"},
   {"name":"Proteina","symbol":"468530.KS","market":"KOSPI"},
   {"name":"프로테나","symbol":"468530.KS","market":"KOSPI"},

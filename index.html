@@ -427,6 +427,11 @@ async function searchStock(query) {
   return [];
 }
 
+// Yahoo Finance exchangeName → 표시 이름
+function mapExchange(name) {
+  return { KSC: 'KOSPI', KOE: 'KOSDAQ', NMS: 'NASDAQ', NGM: 'NASDAQ', NCM: 'NASDAQ', NYQ: 'NYSE', PCX: 'NYSE Arca', ASE: 'NYSE American' }[name] || name || '';
+}
+
 async function fetchStockPrice(symbol, altSymbol) {
   const trySymbol = async (sym) => {
     // v8 chart API
@@ -440,7 +445,8 @@ async function fetchStockPrice(symbol, altSymbol) {
             price: meta.regularMarketPrice,
             previousClose: meta.previousClose || meta.chartPreviousClose || 0,
             currency: meta.currency || 'KRW',
-            symbol: meta.symbol
+            symbol: meta.symbol,
+            exchange: mapExchange(meta.exchangeName)
           };
         }
       }
@@ -457,7 +463,8 @@ async function fetchStockPrice(symbol, altSymbol) {
             price: q.regularMarketPrice,
             previousClose: q.regularMarketPreviousClose || 0,
             currency: q.currency || 'KRW',
-            symbol: q.symbol
+            symbol: q.symbol,
+            exchange: mapExchange(q.fullExchangeName || q.exchange)
           };
         }
       }
@@ -962,9 +969,10 @@ async function selectStock(accId, symbol, name, exchange, altSymbol) {
   statusEl.innerHTML = '<span class="loading-spinner"></span> 시세 조회중...';
 
   const priceData = await fetchStockPrice(symbol, altSymbol || '');
-  // use the actual resolved symbol if alt was used
+  // use the actual resolved symbol if alt was used; override exchange from Yahoo if available
   const resolvedSymbol = priceData?.symbol || symbol;
-  selectedStock[accId] = { symbol: resolvedSymbol, name, exchange };
+  const resolvedExchange = priceData?.exchange || exchange;
+  selectedStock[accId] = { symbol: resolvedSymbol, name, exchange: resolvedExchange };
 
   if (priceData) {
     selectedStock[accId].price = priceData.price;
