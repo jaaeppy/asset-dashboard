@@ -374,14 +374,16 @@ function init() {
   const tryFirebase = () => {
     if (window._fbOnValue && !_fbListening) {
       _fbListening = true;
+      let firstLoad = true;
       window._fbOnValue('portfolio', snapshot => {
         const data = snapshot.val();
         if (data) {
           portfolio = data;
           ACCOUNTS.forEach(a => { if (!portfolio[a.id]) portfolio[a.id] = []; });
-          // 로컬 백업 업데이트
           try { localStorage.setItem('portfolio_v2', JSON.stringify(portfolio)); } catch(e) {}
           renderAll();
+          // 최초 로드 시 자동 시세 조회
+          if (firstLoad) { firstLoad = false; refreshAllPrices(); }
         }
       });
     } else if (!window._fbOnValue) {
