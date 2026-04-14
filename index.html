@@ -826,7 +826,11 @@ function renderTableForAccount(acc, items) {
     const chgCls = change >= 0 ? 'positive' : 'negative';
 
     return `<tr>
-      <td>${item.name}${item.symbol ? `<br><span style="font-size:11px;color:var(--text-muted)">${item.symbol}</span>` : ''}</td>
+      <td>
+        ${item.name}
+        ${item.broker ? `<span style="display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;font-size:10px;background:rgba(108,123,255,0.15);color:var(--accent-light)">${item.broker}</span>` : ''}
+        ${item.symbol ? `<br><span style="font-size:11px;color:var(--text-muted)">${item.symbol}</span>` : ''}
+      </td>
       <td>${fmtPrice(price, isUSD?'USD':'KRW')}</td>
       <td class="${chgCls}">${change >= 0 ? '+' : ''}${isUSD ? change.toFixed(2) : fmt(change)} (${fmtPct(changePct)})</td>
       <td>${makeNumInput(qty, acc.id, i, 'qty', false, 'style="width:80px"')}</td>
@@ -875,6 +879,7 @@ function renderAddArea(acc) {
       onfocus="focusNum(this)" onblur="this.value=this.value?fmtInput(parseNum(this.value),false):''">
     <input class="add-input" type="text" inputmode="decimal" id="add-${acc.id}-avg" placeholder="평균단가"
       onfocus="focusNum(this)" onblur="this.value=this.value?fmtInput(parseNum(this.value),${acc.currency==='USD'}):''">
+    <input class="add-input" type="text" id="add-${acc.id}-broker" placeholder="증권사 (예: NH, 삼증)" style="width:130px">
     <button class="btn btn-sm" id="addbtn-${acc.id}" onclick="addStockItem('${acc.id}')">추가</button>
     <span id="search-status-${acc.id}" style="font-size:12px;color:var(--text-muted)"></span>
   </div>`;
@@ -1078,6 +1083,7 @@ async function addStockItem(accId) {
   const name = searchInput.value.trim();
   if (!name) { showToast('종목명을 입력해주세요'); return; }
 
+  const brokerInput = document.getElementById(`add-${accId}-broker`);
   const item = {
     name: sel?.name || name,
     symbol: sel?.symbol || '',
@@ -1085,6 +1091,7 @@ async function addStockItem(accId) {
     avgPrice: parseNum(avgInput.value) || 0,
     price: sel?.price || 0,
     previousClose: sel?.previousClose || 0,
+    broker: brokerInput?.value.trim() || '',
   };
 
   // If no price yet and we have a symbol, try to fetch
@@ -1101,6 +1108,7 @@ async function addStockItem(accId) {
   searchInput.value = '';
   qtyInput.value = '';
   avgInput.value = '';
+  if (brokerInput) brokerInput.value = '';
   document.getElementById(`search-status-${accId}`).textContent = '';
 
   saveData(); renderAll();
