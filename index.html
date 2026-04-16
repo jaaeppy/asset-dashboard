@@ -563,30 +563,40 @@ async function fetchStockPrice(symbol, altSymbol) {
 
 async function refreshAllPrices() {
   const statusEl = document.getElementById('statusText');
-  let total = 0, done = 0;
 
+  // 중복 제거: 유니크 심볼만 먼저 수집
+  const symbolSet = new Set();
   ACCOUNTS.forEach(acc => {
     if (acc.type === 'stock') {
-      (portfolio[acc.id] || []).forEach(item => { if (item.symbol) total++; });
+      (portfolio[acc.id] || []).forEach(item => { if (item.symbol) symbolSet.add(item.symbol); });
     }
   });
 
-  if (total === 0) { showToast('조회할 종목이 없습니다'); return; }
-  statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (0/${total})`;
+  const symbols = [...symbolSet];
+  if (symbols.length === 0) { showToast('조회할 종목이 없습니다'); return; }
+  statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (0/${symbols.length})`;
 
-  for (const acc of ACCOUNTS) {
-    if (acc.type !== 'stock') continue;
-    for (const item of (portfolio[acc.id] || [])) {
-      if (!item.symbol) continue;
-      const result = await fetchStockPrice(item.symbol);
-      if (result) {
-        item.price = result.price;
-        item.previousClose = result.previousClose;
-      }
-      done++;
-      statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (${done}/${total})`;
-    }
+  // 심볼별 1회만 조회 후 캐시
+  const priceCache = {};
+  let done = 0;
+  for (const sym of symbols) {
+    const result = await fetchStockPrice(sym);
+    if (result) priceCache[sym] = result;
+    done++;
+    statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (${done}/${symbols.length})`;
   }
+
+  // 캐시된 결과를 모든 종목에 적용
+  let total = 0;
+  ACCOUNTS.forEach(acc => {
+    if (acc.type !== 'stock') return;
+    (portfolio[acc.id] || []).forEach(item => {
+      if (!item.symbol) return;
+      const r = priceCache[item.symbol];
+      if (r) { item.price = r.price; item.previousClose = r.previousClose; }
+      total++;
+    });
+  });
 
   statusEl.textContent = `마지막 시세 조회: ${new Date().toLocaleTimeString('ko-KR')}`;
   saveData();
