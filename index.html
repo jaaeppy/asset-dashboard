@@ -527,7 +527,19 @@ async function fetchStockPrice(symbol, altSymbol) {
   };
 
   const result = await trySymbol(symbol);
-  if (result) return result;
+  if (result) {
+    // 거래소 불일치 자동 수정: .KS 심볼인데 KOSDAQ 반환 → .KQ로 재시도 (반대도 마찬가지)
+    const symIsKS = symbol.endsWith('.KS');
+    const symIsKQ = symbol.endsWith('.KQ');
+    const resIsKOSPI  = result.exchange === 'KOSPI';
+    const resIsKOSDAQ = result.exchange === 'KOSDAQ';
+    if ((symIsKS && resIsKOSDAQ) || (symIsKQ && resIsKOSPI)) {
+      const corrected = symIsKS ? symbol.replace('.KS', '.KQ') : symbol.replace('.KQ', '.KS');
+      const retry = await trySymbol(corrected);
+      if (retry) return retry; // 올바른 거래소 결과 반환
+    }
+    return result;
+  }
 
   // Try alternate symbol (KS ↔ KQ)
   if (altSymbol) {

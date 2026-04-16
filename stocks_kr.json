@@ -43,7 +43,7 @@
   {"name":"두산퓨얼셀","symbol":"336260.KS","market":"KOSPI"},
   {"name":"한미반도체","symbol":"042700.KS","market":"KOSPI"},
   {"name":"BHI","symbol":"083650.KQ","market":"KOSDAQ"},
-  {"name":"APR","symbol":"278470.KQ","market":"KOSDAQ"},
+  {"name":"APR","symbol":"278470.KS","market":"KOSPI"},
   {"name":"효성중공업","symbol":"298040.KS","market":"KOSPI"},
   {"name":"ABL바이오","symbol":"298380.KQ","market":"KOSDAQ"},
   {"name":"스피어","symbol":"347700.KQ","market":"KOSDAQ"},
