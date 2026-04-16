@@ -707,65 +707,66 @@ function initCharts() {
 }
 
 function updateCharts() {
-  // Category — 현금은 하나로, 주식/ISA/연금은 증권사별로 세분화
+  // Category — 큰 자산군별 합산 + 툴팁에 증권사 세부 표시
   const catMap = {};
 
-  // 현금 합산
+  // 현금
   const cashTotal = getAccountTotal('cash') + getAccountTotal('dollar');
   if (cashTotal > 0) catMap['현금'] = cashTotal;
 
-  // 국내주식: broker별 합산
-  const brokerMap = {};
-  (portfolio['domestic'] || []).forEach(item => {
-    const acc = ACCOUNTS.find(a => a.id === 'domestic');
-    const val = getItemEvalKRW(acc, item);
-    if (val > 0) {
-      const key = item.broker ? `국내주식(${item.broker})` : '국내주식';
-      brokerMap[key] = (brokerMap[key] || 0) + val;
-    }
-  });
-  Object.assign(catMap, brokerMap);
+  // 국내주식 합산
+  const domTotal = getAccountTotal('domestic');
+  if (domTotal > 0) catMap['국내주식'] = domTotal;
 
-  // ISA: broker별 합산 (broker 이름 그대로 사용, 없으면 'ISA')
-  const isaMap = {};
-  (portfolio['isa'] || []).forEach(item => {
-    const acc = ACCOUNTS.find(a => a.id === 'isa');
-    const val = getItemEvalKRW(acc, item);
-    if (val > 0) {
-      const key = item.broker || 'ISA';
-      isaMap[key] = (isaMap[key] || 0) + val;
-    }
-  });
-  Object.assign(catMap, isaMap);
+  // ISA 합산
+  const isaTotal = getAccountTotal('isa');
+  if (isaTotal > 0) catMap['ISA'] = isaTotal;
 
-  // 연금: broker별 합산
-  const penMap = {};
-  (portfolio['pension'] || []).forEach(item => {
-    const acc = ACCOUNTS.find(a => a.id === 'pension');
-    const val = getItemEvalKRW(acc, item);
-    if (val > 0) {
-      const key = item.broker || '연금';
-      penMap[key] = (penMap[key] || 0) + val;
-    }
-  });
-  Object.assign(catMap, penMap);
+  // 연금 합산
+  const penTotal = getAccountTotal('pension');
+  if (penTotal > 0) catMap['연금'] = penTotal;
 
   // 해외주식
   const foreignTotal = getAccountTotal('foreign');
   if (foreignTotal > 0) catMap['해외주식'] = foreignTotal;
 
+  // 증권사별 세부 데이터 (툴팁용)
+  const brokerDetail = {};
+  ['domestic','isa','pension'].forEach(accId => {
+    const acc = ACCOUNTS.find(a => a.id === accId);
+    const label = accId === 'domestic' ? '국내주식' : accId === 'isa' ? 'ISA' : '연금';
+    const bMap = {};
+    (portfolio[accId] || []).forEach(item => {
+      const val = getItemEvalKRW(acc, item);
+      if (val > 0) {
+        const b = item.broker || '기타';
+        bMap[b] = (bMap[b] || 0) + val;
+      }
+    });
+    brokerDetail[label] = bMap;
+  });
+
   const catLabels = Object.keys(catMap);
   const catData   = Object.values(catMap);
   categoryChart.data.labels = catLabels;
   categoryChart.data.datasets[0].data = catData;
-  // 색상 배열 동적 확장
-  if (catData.length > CATEGORY_COLORS.length) {
-    categoryChart.data.datasets[0].backgroundColor = [...CATEGORY_COLORS, ...HOLDING_COLORS].slice(0, catData.length);
-  } else {
-    categoryChart.data.datasets[0].backgroundColor = CATEGORY_COLORS;
-  }
+  categoryChart.data.datasets[0].backgroundColor = CATEGORY_COLORS;
+  // 툴팁 커스텀: 증권사 세부 표시
+  categoryChart.options.plugins.tooltip.callbacks.label = ctx => {
+    const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+    const pct = total > 0 ? ((ctx.parsed/total)*100).toFixed(1) : 0;
+    const lines = [`${ctx.label}: ${fmtKRW(ctx.parsed)} (${pct}%)`];
+    const detail = brokerDetail[ctx.label];
+    if (detail) {
+      Object.entries(detail).forEach(([b, v]) => {
+        const bp = total > 0 ? ((v/total)*100).toFixed(1) : 0;
+        lines.push(`  └ ${b}: ${fmtKRW(v)} (${bp}%)`);
+      });
+    }
+    return lines;
+  };
   categoryChart.update();
-  renderLegend('categoryLegend', catLabels, catData, [...CATEGORY_COLORS, ...HOLDING_COLORS]);
+  renderLegend('categoryLegend', catLabels, catData, CATEGORY_COLORS);
 
   // Holdings — 같은 종목명끼리 합산
   const hMap = {};
