@@ -204,6 +204,16 @@
     .btn-icon:hover { color: var(--red); }
     .btn-refresh { color: var(--text-muted); font-size: 12px; cursor: pointer; background: none; border: none; padding: 2px 4px; }
     .btn-refresh:hover { color: var(--accent-light); }
+    .broker-input {
+      display: inline-block; margin-left: 5px; padding: 1px 6px;
+      border-radius: 3px; font-size: 10px; font-family: inherit;
+      background: rgba(108,123,255,0.15); color: var(--accent-light);
+      border: 1px solid transparent; outline: none; width: 52px;
+      cursor: pointer; text-align: center;
+    }
+    .broker-input:hover { border-color: rgba(108,123,255,0.4); }
+    .broker-input:focus { background: rgba(108,123,255,0.25); border-color: var(--accent); cursor: text; }
+    .broker-input::placeholder { color: rgba(139,143,163,0.5); }
 
     .badge {
       display: inline-block; padding: 2px 8px; border-radius: 4px;
@@ -799,7 +809,9 @@ function renderTableForAccount(acc, items) {
     return `<table><thead><tr>
       <th style="text-align:left">항목</th><th>금액 (원)</th><th width="40"></th>
     </tr></thead><tbody>${items.map((item, i) => `<tr>
-      <td>${item.name}</td>
+      <td><input class="cell-edit" type="text" value="${item.name||''}" style="text-align:left;width:180px"
+        onblur="updateField('${acc.id}',${i},'name',this.value)"
+        onkeydown="if(event.key==='Enter')this.blur()"></td>
       <td>${makeNumInput(item.amount||0, acc.id, i, 'amount', false)}</td>
       <td><button class="btn-icon" onclick="removeItem('${acc.id}',${i})">×</button></td>
     </tr>`).join('')}</tbody></table>`;
@@ -811,7 +823,9 @@ function renderTableForAccount(acc, items) {
     </tr></thead><tbody>${items.map((item, i) => {
       const usd = parseFloat(item.amountUSD) || 0;
       return `<tr>
-        <td>${item.name}</td>
+        <td><input class="cell-edit" type="text" value="${item.name||''}" style="text-align:left;width:180px"
+          onblur="updateField('${acc.id}',${i},'name',this.value)"
+          onkeydown="if(event.key==='Enter')this.blur()"></td>
         <td>${makeNumInput(item.amountUSD||0, acc.id, i, 'amountUSD', true)}</td>
         <td>${fmtKRW(usd * exchangeRate)}</td>
         <td><button class="btn-icon" onclick="removeItem('${acc.id}',${i})">×</button></td>
@@ -851,7 +865,11 @@ function renderTableForAccount(acc, items) {
     return `<tr>
       <td>
         ${item.name}
-        ${item.broker ? `<span style="display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;font-size:10px;background:rgba(108,123,255,0.15);color:var(--accent-light)">${item.broker}</span>` : ''}
+        <input class="broker-input" type="text" value="${item.broker||''}"
+          placeholder="증권사"
+          onblur="updateField('${acc.id}',${i},'broker',this.value)"
+          onkeydown="if(event.key==='Enter')this.blur()"
+          title="증권사 클릭하여 수정">
         ${item.symbol ? `<br><span style="font-size:11px;color:var(--text-muted)">${item.symbol}</span>` : ''}
       </td>
       <td>${fmtPrice(price, isUSD?'USD':'KRW')}</td>
