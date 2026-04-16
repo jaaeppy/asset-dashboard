@@ -693,14 +693,21 @@ function updateCharts() {
   categoryChart.update();
   renderLegend('categoryLegend', Object.keys(catMap), Object.values(catMap), CATEGORY_COLORS);
 
-  // Holdings
-  const hLabels = [], hData = [];
+  // Holdings — 같은 종목명끼리 합산
+  const hMap = {};
   ACCOUNTS.forEach(acc => {
     (portfolio[acc.id] || []).forEach(item => {
       const val = getItemEvalKRW(acc, item);
-      if (val > 0) { hLabels.push(item.name || '미지정'); hData.push(val); }
+      if (val > 0) {
+        const key = item.name || '미지정';
+        hMap[key] = (hMap[key] || 0) + val;
+      }
     });
   });
+  // 금액 큰 순으로 정렬
+  const sorted = Object.entries(hMap).sort((a, b) => b[1] - a[1]);
+  const hLabels = sorted.map(e => e[0]);
+  const hData   = sorted.map(e => e[1]);
   holdingChart.data.labels = hLabels;
   holdingChart.data.datasets[0].data = hData;
   holdingChart.update();
