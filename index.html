@@ -559,6 +559,30 @@ function getMonthlyLiveData() {
   };
 }
 
+function isLastDayOfMonth(date) {
+  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+  return next.getMonth() !== date.getMonth();
+}
+
+function checkAutoSaveMonthly() {
+  const now = new Date();
+  if (!isLastDayOfMonth(now)) return;               // 말일 아니면 skip
+
+  const ym = getYearMonth(now);
+  const todayStr = now.toISOString().slice(0, 10);  // "2026-04-30"
+  const existing = monthlyHistory[ym];
+
+  // 오늘 이미 저장했으면 skip (하루에 한 번만)
+  if (existing && existing.date === todayStr) return;
+
+  const live = getMonthlyLiveData();
+  monthlyHistory[ym] = live;
+  saveMonthlyData();
+  if (activeTab === 'monthly') renderMonthlyTab();
+  showToast(`📌 ${ym} 월말 자동 저장 완료`);
+  console.log(`[월별자산] ${ym} 월말 자동 저장됨`);
+}
+
 function saveMonthlySnapshot() {
   const now = new Date();
   const ym = getYearMonth(now);
@@ -640,8 +664,14 @@ function renderMonthlyTab() {
       }
     }
 
+    const isLastDay = isCurrent && isLastDayOfMonth(now);
+    const badge = isCurrent
+      ? (isLastDay
+          ? `<span style="color:var(--red);font-size:10px;font-weight:700">말일</span>`
+          : `<span style="color:var(--accent-light);font-size:10px">오늘</span>`)
+      : '';
     const dateLabel = isCurrent
-      ? `<span style="color:var(--accent-light);font-size:10px">현재</span><br>${fmtDateLabel(d.date)}`
+      ? `${badge}<br>${fmtDateLabel(d.date)}`
       : fmtDateLabel(d.date);
 
     return `<tr class="${isCurrent ? 'current-month' : ''}">
@@ -784,7 +814,13 @@ function init() {
           ACCOUNTS.forEach(a => { if (!portfolio[a.id]) portfolio[a.id] = []; });
           try { localStorage.setItem('portfolio_v2', JSON.stringify(portfolio)); } catch(e) {}
           renderAll();
-          if (firstLoad) { firstLoad = false; refreshAllPrices(); }
+          if (firstLoad) {
+            firstLoad = false;
+            refreshAllPrices(); // 완료 후 checkAutoSaveMonthly() 호출됨
+          } else {
+            // 이미 시세가 있는 상태에서 Firebase 동기화 → 월말이면 자동 저장
+            checkAutoSaveMonthly();
+          }
         }
       });
       // 월별 히스토리 Firebase 리스너
@@ -794,6 +830,19 @@ function init() {
     }
   };
   setTimeout(tryFirebase, 300);
+
+  // 자정 타이머 — 말일 자정에 자동 저장 트리거
+  scheduleMidnightCheck();
+}
+
+function scheduleMidnightCheck() {
+  const now = new Date();
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5); // 자정+5초
+  const msUntilMidnight = tomorrow - now;
+  setTimeout(() => {
+    checkAutoSaveMonthly();  // 자정 직후 말일인지 확인
+    scheduleMidnightCheck(); // 다음 자정도 예약
+  }, msUntilMidnight);
 }
 
 // ===================================================================
@@ -992,6 +1041,8 @@ async function refreshAllPrices() {
   saveData();
   renderAll();
   showToast(`${total}개 종목 시세 업데이트 완료`);
+  // 말일 자동 저장 (시세 반영 후 실행)
+  checkAutoSaveMonthly();
 }
 
 // ===================================================================
@@ -1210,6 +1261,8 @@ function renderAll() {
 
   updateCharts();
   renderAccounts();
+  // 월별 탭이 열려있으면 현재 자산 실시간 반영
+  if (activeTab === 'monthly') renderMonthlyTab();
 }
 
 function renderAccounts() {
