@@ -1035,10 +1035,21 @@ async function loadKrDB() {
 
 function searchKrDB(query, db) {
   const q = query.trim().toLowerCase();
+
+  // symbol 기준 중복 제거 helper
+  const dedup = (arr) => {
+    const seen = new Set();
+    return arr.filter(s => {
+      const key = s.symbol;
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    });
+  };
+
   // 숫자 코드 검색 (예: "002710")
   const isCode = /^\d{4,6}$/.test(q);
   if (isCode) {
-    const codeMatches = db.filter(s => s.symbol.startsWith(q));
+    const codeMatches = dedup(db.filter(s => s.symbol.startsWith(q)));
     return codeMatches.slice(0, 8).map(s => ({
       symbol: s.symbol,
       symbolAlt: s.symbol.endsWith('.KS') ? s.symbol.replace('.KS','.KQ') : s.symbol.replace('.KQ','.KS'),
@@ -1051,7 +1062,7 @@ function searchKrDB(query, db) {
   // 이름 검색: 정확히 시작하는 것 우선, 그 다음 포함되는 것
   const starts = db.filter(s => s.name.toLowerCase().startsWith(q));
   const contains = db.filter(s => !s.name.toLowerCase().startsWith(q) && s.name.toLowerCase().includes(q));
-  return [...starts, ...contains].slice(0, 8).map(s => ({
+  return dedup([...starts, ...contains]).slice(0, 8).map(s => ({
     symbol: s.symbol,
     symbolAlt: s.symbol.endsWith('.KS') ? s.symbol.replace('.KS','.KQ') : s.symbol.replace('.KQ','.KS'),
     name: s.name,
