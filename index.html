@@ -567,15 +567,20 @@ async function fetchWithTimeout(url, ms = 5000) {
 }
 
 async function corsFetch(url) {
-  // 1) corsproxy.io (가장 안정적)
-  try {
-    const res = await fetchWithTimeout(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, 6000);
-    if (res.ok) return res;
-  } catch(e) {}
+  // Yahoo Finance는 corsproxy.io가 403을 반환 → 스킵하고 allorigins 바로 사용
+  const isYahoo = url.includes('finance.yahoo.com');
 
-  // 2) allorigins
+  if (!isYahoo) {
+    // 1) corsproxy.io
+    try {
+      const res = await fetchWithTimeout(`https://corsproxy.io/?url=${encodeURIComponent(url)}`, 5000);
+      if (res.ok) return res;
+    } catch(e) {}
+  }
+
+  // 2) allorigins (Yahoo에 가장 신뢰성 높음)
   try {
-    const res = await fetchWithTimeout(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, 5000);
+    const res = await fetchWithTimeout(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, 8000);
     if (res.ok) return res;
   } catch(e) {}
 
@@ -1056,6 +1061,29 @@ function searchKrDB(query, db) {
   }));
 }
 
+// 네이버 검색 응답 파싱 helper
+function parseNaverSearchItems(raw) {
+  try {
+    const d = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    // Naver ac API 응답 형식: { items: [{cd,nm,tp,ms}, ...] }
+    const list = d.items ?? d.result?.items ?? [];
+    return list.map(it => {
+      const code = it.cd ?? it.code ?? '';
+      const name = it.nm ?? it.name ?? '';
+      const ms   = (it.ms ?? it.market ?? '').toUpperCase();
+      const exchange = ms.includes('KOSDAQ') ? 'KOSDAQ' : 'KOSPI';
+      const suffix = exchange === 'KOSPI' ? '.KS' : '.KQ';
+      return {
+        symbol: code + suffix,
+        symbolAlt: code + (exchange === 'KOSPI' ? '.KQ' : '.KS'),
+        name, exchange,
+        type: it.tp === 'E' ? 'ETF' : 'EQUITY',
+        code
+      };
+    }).filter(it => it.code.length === 6);
+  } catch(e) { return []; }
+}
+
 async function searchStock(query) {
   if (!query || query.length < 1) return [];
 
@@ -1065,8 +1093,17 @@ async function searchStock(query) {
     const results = searchKrDB(query, db);
     if (results.length > 0) return results;
 
-    // 로컬 DB에 없으면 영문/숫자 부분만 추출해 Yahoo 검색 시도
-    // 예: "TCC스틸" → "TCC", "S&T모티브" → "S&T"
+    // 로컬 DB에 없으면 Vercel 서버리스 경유 Naver 검색 시도 (순수 한글 포함 대응)
+    try {
+      const res = await fetchWithTimeout(`/api/naver?type=search&q=${encodeURIComponent(query)}`, 6000);
+      if (res?.ok) {
+        const text = await res.text();
+        const items = parseNaverSearchItems(text);
+        if (items.length > 0) return items.slice(0, 8);
+      }
+    } catch(e) {}
+
+    // 영문/숫자 부분만 추출해 Yahoo 검색 시도 (예: "TCC스틸" → "TCC")
     const engPart = query.replace(/[가-힣\s]/g, '').trim();
     if (engPart.length >= 1) {
       try {
@@ -1129,38 +1166,20 @@ function mapExchange(name) {
   return { KSC: 'KOSPI', KOE: 'KOSDAQ', NMS: 'NASDAQ', NGM: 'NASDAQ', NCM: 'NASDAQ', NYQ: 'NYSE', PCX: 'NYSE Arca', ASE: 'NYSE American' }[name] || name || '';
 }
 
-// ── 네이버 금융 현재가 조회 (국내주식 전용) ──────────────────────────────
+// ── 네이버 금융 현재가 조회 — Vercel 서버리스 함수 경유 ─────────────────
+// /api/naver?code={6자리} 가 CORS 없이 Naver에 직접 접근
 async function fetchNaverStockPrice(code) {
-  // code: 6자리 숫자 (예: "002710")
   try {
-    const url = `https://m.stock.naver.com/api/stock/${code}/integration`;
-    const res = await corsFetch(url);
-    if (!res) return null;
-    let data;
-    try { data = await res.json(); } catch(e) { return null; }
-
-    // 현재가 (문자열 "16,669" 또는 숫자 16669)
-    const rawPrice = data.closePrice ?? data.currentPrice ?? data.stockEndOfDayInfos?.[0]?.closePrice;
-    if (rawPrice == null) return null;
-    const price = typeof rawPrice === 'string' ? parseFloat(rawPrice.replace(/,/g, '')) : Number(rawPrice);
-    if (!price || isNaN(price)) return null;
-
-    // 전일 종가
-    const rawPrev = data.previousClosePrice ?? rawPrice;
-    const prev = typeof rawPrev === 'string' ? parseFloat(rawPrev.replace(/,/g, '')) : Number(rawPrev);
-
-    // 시장 구분 (KSC=KOSPI, KOE=KOSDAQ)
-    const tc = data.stockExchangeType?.typeCode || '';
-    const sc = data.stockExchangeType?.shortTypeCode || '';
-    let exchange = 'KOSPI';
-    if (tc.toUpperCase().includes('KOSDAQ') || sc === 'SDQ' || sc === 'KSQ' || sc === 'KOE') exchange = 'KOSDAQ';
-
+    const res = await fetchWithTimeout(`/api/naver?code=${code}`, 8000);
+    if (!res || !res.ok) return null;
+    const d = await res.json();
+    if (!d.price) return null;
     return {
-      price,
-      previousClose: (!isNaN(prev) && prev > 0) ? prev : price,
+      price: d.price,
+      previousClose: d.previousClose || d.price,
       currency: 'KRW',
-      symbol: `${code}.${exchange === 'KOSPI' ? 'KS' : 'KQ'}`,
-      exchange
+      symbol: d.symbol || `${code}.${d.exchange === 'KOSPI' ? 'KS' : 'KQ'}`,
+      exchange: d.exchange || 'KOSPI'
     };
   } catch(e) { return null; }
 }
