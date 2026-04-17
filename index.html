@@ -265,9 +265,11 @@
       .account-subtotal { width: 100%; justify-content: flex-end; gap: 16px; }
       .subtotal-value { font-size: 13px; }
       .subtotal-label { font-size: 10px; }
-      .gnb { padding: 0 12px; }
-      .gnb-logo { font-size: 14px; }
-      .gnb-tab { padding: 0 12px; font-size: 12px; }
+      .gnb { padding: 0; margin: 0 -12px 16px -12px; }
+      .gnb-logo { font-size: 13px; padding: 0 12px; flex-shrink: 0; }
+      .gnb-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      .gnb-tabs::-webkit-scrollbar { display: none; }
+      .gnb-tab { padding: 0 14px; font-size: 12px; white-space: nowrap; }
     }
 
     /* ===== GNB ===== */
@@ -283,11 +285,12 @@
       border-right: 1px solid var(--border);
       line-height: 52px; white-space: nowrap;
     }
-    .gnb-tabs { display: flex; height: 52px; }
+    .gnb-tabs { display: flex; height: 52px; flex: 1; overflow-x: auto; scrollbar-width: none; }
+    .gnb-tabs::-webkit-scrollbar { display: none; }
     .gnb-tab {
       background: none; border: none; cursor: pointer;
       color: var(--text-muted); font-size: 13px; font-family: inherit;
-      font-weight: 500; padding: 0 20px; height: 100%;
+      font-weight: 500; padding: 0 20px; height: 100%; white-space: nowrap; flex-shrink: 0;
       border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s;
     }
     .gnb-tab:hover { color: var(--text); }
