@@ -1030,7 +1030,20 @@ async function loadKrDB() {
 
 function searchKrDB(query, db) {
   const q = query.trim().toLowerCase();
-  // 정확히 시작하는 것 우선, 그 다음 포함되는 것
+  // 숫자 코드 검색 (예: "002710")
+  const isCode = /^\d{4,6}$/.test(q);
+  if (isCode) {
+    const codeMatches = db.filter(s => s.symbol.startsWith(q));
+    return codeMatches.slice(0, 8).map(s => ({
+      symbol: s.symbol,
+      symbolAlt: s.symbol.endsWith('.KS') ? s.symbol.replace('.KS','.KQ') : s.symbol.replace('.KQ','.KS'),
+      name: s.name,
+      exchange: s.market,
+      type: s.market === 'ETF' ? 'ETF' : 'EQUITY',
+      code: s.symbol.slice(0, 6)
+    }));
+  }
+  // 이름 검색: 정확히 시작하는 것 우선, 그 다음 포함되는 것
   const starts = db.filter(s => s.name.toLowerCase().startsWith(q));
   const contains = db.filter(s => !s.name.toLowerCase().startsWith(q) && s.name.toLowerCase().includes(q));
   return [...starts, ...contains].slice(0, 8).map(s => ({
@@ -1046,14 +1059,44 @@ function searchKrDB(query, db) {
 async function searchStock(query) {
   if (!query || query.length < 1) return [];
 
-  // 한글 → 로컬 DB에서 검색
+  // 한글 포함 → 로컬 DB에서 먼저 검색
   if (hasKorean(query)) {
     const db = await loadKrDB();
     const results = searchKrDB(query, db);
     if (results.length > 0) return results;
+
+    // 로컬 DB에 없으면 영문/숫자 부분만 추출해 Yahoo 검색 시도
+    // 예: "TCC스틸" → "TCC", "S&T모티브" → "S&T"
+    const engPart = query.replace(/[가-힣\s]/g, '').trim();
+    if (engPart.length >= 1) {
+      try {
+        const yahooUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(engPart)}&quotesCount=10&newsCount=0&listsCount=0`;
+        const res = await corsFetch(yahooUrl);
+        if (res) {
+          const data = await res.json();
+          if (data.quotes?.length > 0) {
+            return data.quotes
+              .filter(q => q.quoteType === 'EQUITY' || q.quoteType === 'ETF')
+              .map(q => {
+                const sym = q.symbol || '';
+                const market = sym.endsWith('.KS') ? 'KOSPI' : sym.endsWith('.KQ') ? 'KOSDAQ' : (q.exchDisp || q.exchange || '');
+                return {
+                  symbol: sym,
+                  symbolAlt: sym.endsWith('.KS') ? sym.replace('.KS','.KQ') : sym.endsWith('.KQ') ? sym.replace('.KQ','.KS') : '',
+                  name: q.shortname || q.longname || sym,
+                  exchange: market,
+                  type: q.quoteType,
+                  code: (sym.endsWith('.KS') || sym.endsWith('.KQ')) ? sym.slice(0,6) : ''
+                };
+              });
+          }
+        }
+      } catch(e) { console.warn('Yahoo search (eng part) failed', e); }
+    }
+    return [];
   }
 
-  // 영문 / 티커 → Yahoo Finance
+  // 영문 / 티커 / 숫자 → Yahoo Finance
   try {
     const yahooUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&listsCount=0`;
     const res = await corsFetch(yahooUrl);
