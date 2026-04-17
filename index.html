@@ -1129,11 +1129,48 @@ function mapExchange(name) {
   return { KSC: 'KOSPI', KOE: 'KOSDAQ', NMS: 'NASDAQ', NGM: 'NASDAQ', NCM: 'NASDAQ', NYQ: 'NYSE', PCX: 'NYSE Arca', ASE: 'NYSE American' }[name] || name || '';
 }
 
-async function fetchStockPrice(symbol, altSymbol) {
-  const trySymbol = async (sym) => {
-    // v8 chart API
+// ── 네이버 금융 현재가 조회 (국내주식 전용) ──────────────────────────────
+async function fetchNaverStockPrice(code) {
+  // code: 6자리 숫자 (예: "002710")
+  try {
+    const url = `https://m.stock.naver.com/api/stock/${code}/integration`;
+    const res = await corsFetch(url);
+    if (!res) return null;
+    let data;
+    try { data = await res.json(); } catch(e) { return null; }
+
+    // 현재가 (문자열 "16,669" 또는 숫자 16669)
+    const rawPrice = data.closePrice ?? data.currentPrice ?? data.stockEndOfDayInfos?.[0]?.closePrice;
+    if (rawPrice == null) return null;
+    const price = typeof rawPrice === 'string' ? parseFloat(rawPrice.replace(/,/g, '')) : Number(rawPrice);
+    if (!price || isNaN(price)) return null;
+
+    // 전일 종가
+    const rawPrev = data.previousClosePrice ?? rawPrice;
+    const prev = typeof rawPrev === 'string' ? parseFloat(rawPrev.replace(/,/g, '')) : Number(rawPrev);
+
+    // 시장 구분 (KSC=KOSPI, KOE=KOSDAQ)
+    const tc = data.stockExchangeType?.typeCode || '';
+    const sc = data.stockExchangeType?.shortTypeCode || '';
+    let exchange = 'KOSPI';
+    if (tc.toUpperCase().includes('KOSDAQ') || sc === 'SDQ' || sc === 'KSQ' || sc === 'KOE') exchange = 'KOSDAQ';
+
+    return {
+      price,
+      previousClose: (!isNaN(prev) && prev > 0) ? prev : price,
+      currency: 'KRW',
+      symbol: `${code}.${exchange === 'KOSPI' ? 'KS' : 'KQ'}`,
+      exchange
+    };
+  } catch(e) { return null; }
+}
+
+// ── Yahoo Finance 현재가 조회 ─────────────────────────────────────────────
+async function fetchYahooStockPrice(sym) {
+  // v8 chart API (query1)
+  for (const host of ['query1', 'query2']) {
     try {
-      const res = await corsFetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`);
+      const res = await corsFetch(`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`);
       if (res) {
         const data = await res.json();
         const meta = data.chart?.result?.[0]?.meta;
@@ -1148,46 +1185,60 @@ async function fetchStockPrice(symbol, altSymbol) {
         }
       }
     } catch(e) {}
-
-    // v6 quote API fallback
-    try {
-      const res = await corsFetch(`https://query1.finance.yahoo.com/v6/finance/quote?symbols=${encodeURIComponent(sym)}`);
-      if (res) {
-        const data = await res.json();
-        const q = data.quoteResponse?.result?.[0];
-        if (q && q.regularMarketPrice) {
-          return {
-            price: q.regularMarketPrice,
-            previousClose: q.regularMarketPreviousClose || 0,
-            currency: q.currency || 'KRW',
-            symbol: q.symbol,
-            exchange: mapExchange(q.fullExchangeName || q.exchange)
-          };
-        }
+  }
+  // v6 quote API (query1)
+  try {
+    const res = await corsFetch(`https://query1.finance.yahoo.com/v6/finance/quote?symbols=${encodeURIComponent(sym)}`);
+    if (res) {
+      const data = await res.json();
+      const q = data.quoteResponse?.result?.[0];
+      if (q && q.regularMarketPrice) {
+        return {
+          price: q.regularMarketPrice,
+          previousClose: q.regularMarketPreviousClose || 0,
+          currency: q.currency || 'KRW',
+          symbol: q.symbol,
+          exchange: mapExchange(q.fullExchangeName || q.exchange)
+        };
       }
-    } catch(e) {}
-    return null;
-  };
-
-  const result = await trySymbol(symbol);
-  if (result) {
-    // 거래소 불일치 자동 수정: .KS 심볼인데 KOSDAQ 반환 → .KQ로 재시도 (반대도 마찬가지)
-    const symIsKS = symbol.endsWith('.KS');
-    const symIsKQ = symbol.endsWith('.KQ');
-    const resIsKOSPI  = result.exchange === 'KOSPI';
-    const resIsKOSDAQ = result.exchange === 'KOSDAQ';
-    if ((symIsKS && resIsKOSDAQ) || (symIsKQ && resIsKOSPI)) {
-      const corrected = symIsKS ? symbol.replace('.KS', '.KQ') : symbol.replace('.KQ', '.KS');
-      const retry = await trySymbol(corrected);
-      if (retry) return retry; // 올바른 거래소 결과 반환
     }
-    return result;
+  } catch(e) {}
+  return null;
+}
+
+async function fetchStockPrice(symbol, altSymbol) {
+  const isKorean = symbol.endsWith('.KS') || symbol.endsWith('.KQ');
+
+  // ① 국내주식: 네이버 금융 우선 (모든 코스피/코스닥 종목 지원)
+  if (isKorean) {
+    const code = symbol.slice(0, 6);
+    const naver = await fetchNaverStockPrice(code);
+    if (naver) return naver;
   }
 
-  // Try alternate symbol (KS ↔ KQ)
+  // ② Yahoo Finance (국내주식 fallback + 해외주식)
+  const yahoo = await fetchYahooStockPrice(symbol);
+  if (yahoo) {
+    // 거래소 불일치 자동 수정: .KS 심볼인데 KOSDAQ 반환 → .KQ로 재시도
+    if (isKorean) {
+      const symIsKS = symbol.endsWith('.KS');
+      if ((symIsKS && yahoo.exchange === 'KOSDAQ') || (!symIsKS && yahoo.exchange === 'KOSPI')) {
+        const corrected = symIsKS ? symbol.replace('.KS', '.KQ') : symbol.replace('.KQ', '.KS');
+        const retry = await fetchYahooStockPrice(corrected);
+        if (retry) return retry;
+      }
+    }
+    return yahoo;
+  }
+
+  // ③ altSymbol (KS ↔ KQ 스왑) 시도
   if (altSymbol) {
-    const alt = await trySymbol(altSymbol);
-    if (alt) return alt;
+    if (altSymbol.endsWith('.KS') || altSymbol.endsWith('.KQ')) {
+      const naverAlt = await fetchNaverStockPrice(altSymbol.slice(0, 6));
+      if (naverAlt) return naverAlt;
+    }
+    const yahooAlt = await fetchYahooStockPrice(altSymbol);
+    if (yahooAlt) return yahooAlt;
   }
 
   return null;
