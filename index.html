@@ -354,6 +354,9 @@
   <div class="gnb-tabs">
     <button class="gnb-tab active" id="tab-btn-portfolio" onclick="switchTab('portfolio')">포트폴리오</button>
     <button class="gnb-tab" id="tab-btn-monthly" onclick="switchTab('monthly')">월별 자산</button>
+    <div style="width:1px;background:var(--border);margin:12px 6px;"></div>
+    <button class="gnb-tab" id="tab-btn-loan-portfolio" onclick="switchTab('loan-portfolio')">대출 포트폴리오</button>
+    <button class="gnb-tab" id="tab-btn-loan-monthly" onclick="switchTab('loan-monthly')">대출 월별 자산</button>
   </div>
 </nav>
 
@@ -406,10 +409,10 @@
     <h2>월별 자산 현황</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <span style="font-size:12px;color:var(--text-muted)" id="monthlyLastSaved"></span>
-      <button class="btn btn-outline btn-sm" onclick="saveMonthlySnapshot()">📌 이번달 스냅샷 저장</button>
-      <button class="btn btn-outline btn-sm" onclick="exportMonthlyJSON()">내보내기</button>
+      <button class="btn btn-outline btn-sm" onclick="saveMonthlySnapshotFor(MAIN_MONTHLY_CTX)">📌 이번달 스냅샷 저장</button>
+      <button class="btn btn-outline btn-sm" onclick="exportMonthlyJSONFor(MAIN_MONTHLY_CTX)">내보내기</button>
       <label class="btn btn-outline btn-sm" style="cursor:pointer">
-        가져오기 <input type="file" accept=".json" onchange="importMonthlyJSON(event)" style="display:none">
+        가져오기 <input type="file" accept=".json" onchange="importMonthlyJSONFor(event, MAIN_MONTHLY_CTX)" style="display:none">
       </label>
     </div>
   </div>
@@ -448,6 +451,93 @@
     <div class="monthly-chart-wrap"><canvas id="monthlyTrendChart"></canvas></div>
   </div>
 </div><!-- /tab-monthly -->
+
+<!-- 대출 포트폴리오 탭 -->
+<div id="tab-loan-portfolio" class="tab-content hidden">
+<div class="header">
+  <div class="header-left">
+    <h1>대출 포트폴리오</h1>
+    <div class="date" id="loanCurrentDate"></div>
+  </div>
+  <div class="header-right">
+    <div class="total-label">총 평가금액</div>
+    <div class="total-value" id="loanTotalValue">0 원</div>
+    <div class="total-pnl" id="loanTotalPnl"></div>
+    <div class="exchange-rate">USD/KRW <span id="loanExchangeRateDisplay">로딩중...</span></div>
+  </div>
+</div>
+<div class="charts-section">
+  <div class="chart-card">
+    <h2>자산군별 비중</h2>
+    <div class="chart-wrapper"><canvas id="loanCategoryChart"></canvas></div>
+    <div class="chart-legend" id="loanCategoryLegend"></div>
+  </div>
+  <div class="chart-card">
+    <h2>종목별 비중</h2>
+    <div class="chart-wrapper"><canvas id="loanHoldingChart"></canvas></div>
+    <div class="chart-legend" id="loanHoldingLegend"></div>
+  </div>
+</div>
+<div class="toolbar">
+  <div class="status" id="loanStatusText"></div>
+  <button class="btn btn-outline btn-sm" onclick="refreshLoanAllPrices()">시세 새로고침</button>
+  <button class="btn btn-outline btn-sm" onclick="saveLoanData(); showToast('저장 완료')">저장</button>
+  <button class="btn btn-outline btn-sm" onclick="exportLoanJSON()">내보내기</button>
+  <label class="btn btn-outline btn-sm" style="cursor:pointer">
+    불러오기 <input type="file" accept=".json" onchange="importLoanJSON(event)" style="display:none">
+  </label>
+</div>
+<div class="accounts-section" id="loanAccountsContainer"></div>
+</div><!-- /tab-loan-portfolio -->
+
+<!-- 대출 월별 자산 탭 -->
+<div id="tab-loan-monthly" class="tab-content hidden">
+  <div class="monthly-toolbar">
+    <h2>대출 월별 자산 현황</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:12px;color:var(--text-muted)" id="loanMonthlyLastSaved"></span>
+      <button class="btn btn-outline btn-sm" onclick="saveMonthlySnapshotFor(LOAN_MONTHLY_CTX)">📌 이번달 스냅샷 저장</button>
+      <button class="btn btn-outline btn-sm" onclick="exportMonthlyJSONFor(LOAN_MONTHLY_CTX)">내보내기</button>
+      <label class="btn btn-outline btn-sm" style="cursor:pointer">
+        가져오기 <input type="file" accept=".json" onchange="importMonthlyJSONFor(event, LOAN_MONTHLY_CTX)" style="display:none">
+      </label>
+    </div>
+  </div>
+  <div class="monthly-table-wrap">
+    <table class="monthly-table">
+      <thead>
+        <tr>
+          <th rowspan="2" style="text-align:center;min-width:72px">일</th>
+          <th rowspan="2" style="min-width:64px">환율</th>
+          <th rowspan="2" style="min-width:100px">총자산</th>
+          <th colspan="6" style="text-align:center;border-left:1px solid var(--border)">금액 (원)</th>
+          <th colspan="6" style="text-align:center;border-left:1px solid var(--border)">비중 (%)</th>
+          <th rowspan="2" style="min-width:90px;border-left:1px solid var(--border)">전월대비 증감</th>
+          <th rowspan="2" style="text-align:left;min-width:160px">특이사항</th>
+        </tr>
+        <tr class="sub-header">
+          <th style="border-left:1px solid var(--border);min-width:88px">현금</th>
+          <th style="min-width:80px">달러</th>
+          <th style="min-width:96px">미국주식</th>
+          <th style="min-width:96px">국내주식</th>
+          <th style="min-width:88px">ISA</th>
+          <th style="min-width:88px">연금</th>
+          <th style="border-left:1px solid var(--border);min-width:44px">현금</th>
+          <th style="min-width:44px">달러</th>
+          <th style="min-width:44px">미주</th>
+          <th style="min-width:44px">국주</th>
+          <th style="min-width:44px">ISA</th>
+          <th style="min-width:44px">연금</th>
+        </tr>
+      </thead>
+      <tbody id="loanMonthlyTableBody"></tbody>
+    </table>
+  </div>
+  <div class="monthly-chart-card">
+    <h2>총 자산 추이</h2>
+    <div class="monthly-chart-wrap"><canvas id="loanMonthlyTrendChart"></canvas></div>
+  </div>
+</div><!-- /tab-loan-monthly -->
 
 <div class="toast" id="toast"></div>
 
@@ -499,6 +589,24 @@ const ACCOUNTS = [
   { id: 'pension',  name: '연금',     badge: 'badge-pension',  type: 'stock',  currency: 'KRW' },
 ];
 
+const LOAN_ACCOUNTS = [
+  { id: 'loan_cash',     name: '현금',     badge: 'badge-cash',     type: 'cash' },
+  { id: 'loan_dollar',   name: '달러',     badge: 'badge-dollar',   type: 'dollar' },
+  { id: 'loan_domestic', name: '국내주식', badge: 'badge-domestic', type: 'stock',  currency: 'KRW' },
+  { id: 'loan_foreign',  name: '해외주식', badge: 'badge-foreign',  type: 'stock',  currency: 'USD' },
+  { id: 'loan_isa',      name: 'ISA',      badge: 'badge-isa',      type: 'stock',  currency: 'KRW' },
+  { id: 'loan_pension',  name: '연금',     badge: 'badge-pension',  type: 'stock',  currency: 'KRW' },
+];
+
+// 대출/일반 구분 헬퍼
+function isLoanAccId(accId) { return String(accId).startsWith('loan_'); }
+function getPortfolioFor(accId) { return isLoanAccId(accId) ? loanPortfolio : portfolio; }
+function getAccountsFor(accId)  { return isLoanAccId(accId) ? LOAN_ACCOUNTS : ACCOUNTS; }
+function saveAndRenderFor(accId) {
+  if (isLoanAccId(accId)) { saveLoanData(); renderLoanAll(); }
+  else { saveData(); renderAll(); }
+}
+
 const CATEGORY_COLORS = ['#eab308','#22c55e','#3b82f6','#ec4899','#8b5cf6','#ef4444','#06b6d4'];
 const HOLDING_COLORS = [
   '#6c7bff','#3b82f6','#06b6d4','#22c55e','#84cc16','#eab308','#f97316',
@@ -508,6 +616,7 @@ const HOLDING_COLORS = [
 
 let exchangeRate = 1400;
 let portfolio = {};
+let loanPortfolio = {};
 let searchTimeout = null;
 let activeSearchAccId = null;
 let searchResults = {}; // store results per accId
@@ -517,22 +626,59 @@ let searchActiveIdx = {}; // active index per accId
 // TAB NAVIGATION
 // ===================================================================
 let activeTab = 'portfolio';
+const ALL_TABS = ['portfolio','monthly','loan-portfolio','loan-monthly'];
 
 function switchTab(tab) {
   activeTab = tab;
-  document.getElementById('tab-portfolio').classList.toggle('hidden', tab !== 'portfolio');
-  document.getElementById('tab-monthly').classList.toggle('hidden', tab !== 'monthly');
-  document.getElementById('tab-btn-portfolio').classList.toggle('active', tab === 'portfolio');
-  document.getElementById('tab-btn-monthly').classList.toggle('active', tab === 'monthly');
-  if (tab === 'monthly') renderMonthlyTab();
+  ALL_TABS.forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
+    document.getElementById(`tab-btn-${t}`).classList.toggle('active', t === tab);
+  });
+  if (tab === 'monthly') renderMonthlyTabFor(MAIN_MONTHLY_CTX);
+  if (tab === 'loan-portfolio') { initLoanCharts(); renderLoanAll(); }
+  if (tab === 'loan-monthly') renderMonthlyTabFor(LOAN_MONTHLY_CTX);
 }
 
 // ===================================================================
 // MONTHLY HISTORY
 // ===================================================================
-let monthlyHistory = {};         // { "2026-04": { date, exchangeRate, cash, dollar, usStock, krStock, pension, isa, note } }
+let monthlyHistory = {};
+let loanMonthlyHistory = {};
 let monthlyChart = null;
+let loanMonthlyChart = null;
 let _fbMonthlyListening = false;
+let _fbLoanListening = false;
+let _fbLoanMonthlyListening = false;
+
+// 월별 컨텍스트 객체 (함수 재사용용)
+const MAIN_MONTHLY_CTX = {
+  getHistory: ()  => monthlyHistory,
+  setHistory: (h) => { monthlyHistory = h; },
+  getTotal: (k)   => getAccountTotal(k),
+  cashKey: 'cash', dollarKey: 'dollar', usKey: 'foreign', krKey: 'domestic', isaKey: 'isa', pensionKey: 'pension',
+  getChart: ()    => monthlyChart,
+  setChart: (c)   => { monthlyChart = c; },
+  tbodyId:        'monthlyTableBody',
+  lastSavedId:    'monthlyLastSaved',
+  trendChartId:   'monthlyTrendChart',
+  storageKey:     'monthlyHistory_v1',
+  fbPath:         'monthlyHistory',
+  noteCtxKey:     'main',
+};
+const LOAN_MONTHLY_CTX = {
+  getHistory: ()  => loanMonthlyHistory,
+  setHistory: (h) => { loanMonthlyHistory = h; },
+  getTotal: (k)   => getAccountTotal(k),
+  cashKey: 'loan_cash', dollarKey: 'loan_dollar', usKey: 'loan_foreign', krKey: 'loan_domestic', isaKey: 'loan_isa', pensionKey: 'loan_pension',
+  getChart: ()    => loanMonthlyChart,
+  setChart: (c)   => { loanMonthlyChart = c; },
+  tbodyId:        'loanMonthlyTableBody',
+  lastSavedId:    'loanMonthlyLastSaved',
+  trendChartId:   'loanMonthlyTrendChart',
+  storageKey:     'loanMonthlyHistory_v1',
+  fbPath:         'loanMonthlyHistory',
+  noteCtxKey:     'loan',
+};
 
 function getYearMonth(date) {
   return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
@@ -546,20 +692,20 @@ function fmtDateLabel(dateStr) {
   return dateStr ? dateStr.slice(2, 7).replace('-', '/') : '';
 }
 
-function getMonthlyLiveData() {
+function getMonthlyLiveDataFor(ctx) {
   const now = new Date();
-  const cash    = getAccountTotal('cash');
-  const dollar  = getAccountTotal('dollar');   // already KRW
-  const usStock = getAccountTotal('foreign');
-  const krStock = getAccountTotal('domestic');
-  const pension = getAccountTotal('pension');
-  const isa     = getAccountTotal('isa');
-  const total   = cash + dollar + usStock + krStock + pension + isa;
+  const cash    = ctx.getTotal(ctx.cashKey);
+  const dollar  = ctx.getTotal(ctx.dollarKey);
+  const usStock = ctx.getTotal(ctx.usKey);
+  const krStock = ctx.getTotal(ctx.krKey);
+  const isa     = ctx.getTotal(ctx.isaKey);
+  const pension = ctx.getTotal(ctx.pensionKey);
+  const total   = cash + dollar + usStock + krStock + isa + pension;
   return {
     date: now.toISOString().slice(0,10),
     exchangeRate: Math.round(exchangeRate * 100) / 100,
-    cash, dollar, usStock, krStock, pension, isa, total,
-    note: (monthlyHistory[getYearMonth(now)] || {}).note || ''
+    cash, dollar, usStock, krStock, isa, pension, total,
+    note: (ctx.getHistory()[getYearMonth(now)] || {}).note || ''
   };
 }
 
@@ -568,151 +714,134 @@ function isLastDayOfMonth(date) {
   return next.getMonth() !== date.getMonth();
 }
 
-function checkAutoSaveMonthly() {
+// ---- 컨텍스트 기반 월별 공통 함수 ----
+
+function checkAutoSaveMonthlyFor(ctx) {
   const now = new Date();
-  if (!isLastDayOfMonth(now)) return;               // 말일 아니면 skip
-
+  if (!isLastDayOfMonth(now)) return;
   const ym = getYearMonth(now);
-  const todayStr = now.toISOString().slice(0, 10);  // "2026-04-30"
-  const existing = monthlyHistory[ym];
-
-  // 오늘 이미 저장했으면 skip (하루에 한 번만)
+  const todayStr = now.toISOString().slice(0,10);
+  const existing = ctx.getHistory()[ym];
   if (existing && existing.date === todayStr) return;
-
-  const live = getMonthlyLiveData();
-  monthlyHistory[ym] = live;
-  saveMonthlyData();
-  if (activeTab === 'monthly') renderMonthlyTab();
+  const live = getMonthlyLiveDataFor(ctx);
+  ctx.getHistory()[ym] = live;
+  saveMonthlyDataFor(ctx);
+  if (activeTab === 'monthly' && ctx === MAIN_MONTHLY_CTX) renderMonthlyTabFor(ctx);
+  if (activeTab === 'loan-monthly' && ctx === LOAN_MONTHLY_CTX) renderMonthlyTabFor(ctx);
   showToast(`📌 ${ym} 월말 자동 저장 완료`);
-  console.log(`[월별자산] ${ym} 월말 자동 저장됨`);
+}
+// 기존 호환 래퍼
+function checkAutoSaveMonthly() {
+  checkAutoSaveMonthlyFor(MAIN_MONTHLY_CTX);
+  checkAutoSaveMonthlyFor(LOAN_MONTHLY_CTX);
 }
 
-function saveMonthlySnapshot() {
-  const now = new Date();
-  const ym = getYearMonth(now);
-  const live = getMonthlyLiveData();
-  monthlyHistory[ym] = live;
-  saveMonthlyData();
-  renderMonthlyTab();
+function saveMonthlySnapshotFor(ctx) {
+  const ym = getYearMonth(new Date());
+  ctx.getHistory()[ym] = getMonthlyLiveDataFor(ctx);
+  saveMonthlyDataFor(ctx);
+  renderMonthlyTabFor(ctx);
   showToast(`${ym} 스냅샷 저장 완료`);
 }
 
-function exportMonthlyJSON() {
-  const blob = new Blob([JSON.stringify(monthlyHistory, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `monthly_history_${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
+function exportMonthlyJSONFor(ctx) {
+  const blob = new Blob([JSON.stringify(ctx.getHistory(), null, 2)], { type:'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `monthly_${ctx.fbPath}_${new Date().toISOString().slice(0,10)}.json`; a.click();
   showToast('월별 데이터 내보내기 완료');
 }
 
-function importMonthlyJSON(event) {
-  const file = event.target.files[0];
-  if (!file) return;
+function importMonthlyJSONFor(event, ctx) {
+  const file = event.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
     try {
       const imported = JSON.parse(e.target.result);
-      // 기존 데이터와 병합 (현재 월 live 데이터는 덮어쓰지 않음)
       const currentYM = getYearMonth(new Date());
+      const hist = ctx.getHistory();
       Object.entries(imported).forEach(([ym, data]) => {
-        if (ym === currentYM) return; // 현재 월은 skip
-        if (!monthlyHistory[ym]) {
-          monthlyHistory[ym] = data;
-        } else {
-          // 기존 note는 유지, 나머지는 덮어쓰기
-          monthlyHistory[ym] = { ...data, note: monthlyHistory[ym].note || data.note || '' };
-        }
+        if (ym === currentYM) return;
+        hist[ym] = { ...data, note: (hist[ym] || {}).note || data.note || '' };
       });
-      saveMonthlyData();
-      renderMonthlyTab();
-      showToast(`월별 데이터 ${Object.keys(imported).length}개월 불러오기 완료`);
+      saveMonthlyDataFor(ctx); renderMonthlyTabFor(ctx);
+      showToast(`${Object.keys(imported).length}개월 불러오기 완료`);
     } catch(err) { showToast('파일을 읽을 수 없습니다'); }
   };
-  reader.readAsText(file);
-  event.target.value = '';
+  reader.readAsText(file); event.target.value = '';
 }
 
-function updateMonthlyNote(ym, value) {
-  if (!monthlyHistory[ym]) monthlyHistory[ym] = {};
-  monthlyHistory[ym].note = value;
-  saveMonthlyData();
+function updateMonthlyNote(ym, ctxKey, value) {
+  const ctx = ctxKey === 'loan' ? LOAN_MONTHLY_CTX : MAIN_MONTHLY_CTX;
+  const hist = ctx.getHistory();
+  if (!hist[ym]) hist[ym] = {};
+  hist[ym].note = value;
+  saveMonthlyDataFor(ctx);
 }
 
-function saveMonthlyData() {
-  if (window._fbSet) {
-    window._fbSet('monthlyHistory', monthlyHistory).catch(e => console.warn('Firebase monthly save error', e));
-  }
-  try { localStorage.setItem('monthlyHistory_v1', JSON.stringify(monthlyHistory)); } catch(e) {}
+function saveMonthlyDataFor(ctx) {
+  if (window._fbSet) window._fbSet(ctx.fbPath, ctx.getHistory()).catch(e => console.warn(e));
+  try { localStorage.setItem(ctx.storageKey, JSON.stringify(ctx.getHistory())); } catch(e) {}
 }
 
-function loadMonthlyData() {
+function loadMonthlyDataFor(ctx) {
   try {
-    const saved = localStorage.getItem('monthlyHistory_v1');
-    if (saved) monthlyHistory = JSON.parse(saved);
+    const saved = localStorage.getItem(ctx.storageKey);
+    if (saved) ctx.setHistory(JSON.parse(saved));
   } catch(e) {}
 }
 
-function initMonthlyFirebase() {
-  if (!window._fbOnValue || _fbMonthlyListening) return;
-  _fbMonthlyListening = true;
-  window._fbOnValue('monthlyHistory', snapshot => {
+function initMonthlyFirebaseFor(ctx) {
+  if (!window._fbOnValue) return;
+  window._fbOnValue(ctx.fbPath, snapshot => {
     const data = snapshot.val();
     if (data) {
-      monthlyHistory = data;
-      try { localStorage.setItem('monthlyHistory_v1', JSON.stringify(monthlyHistory)); } catch(e) {}
+      ctx.setHistory(data);
+      try { localStorage.setItem(ctx.storageKey, JSON.stringify(data)); } catch(e) {}
     }
-    if (activeTab === 'monthly') renderMonthlyTab();
+    if ((activeTab === 'monthly' && ctx === MAIN_MONTHLY_CTX) ||
+        (activeTab === 'loan-monthly' && ctx === LOAN_MONTHLY_CTX)) {
+      renderMonthlyTabFor(ctx);
+    }
   });
 }
 
-function renderMonthlyTab() {
+function renderMonthlyTabFor(ctx) {
   const now = new Date();
   const currentYM = getYearMonth(now);
-  const live = getMonthlyLiveData();
+  const live = getMonthlyLiveDataFor(ctx);
+  const hist = ctx.getHistory();
 
-  // 정렬된 월 목록 (최신순)
-  const savedMonths = Object.keys(monthlyHistory)
-    .filter(ym => ym !== currentYM)
-    .sort().reverse();
-
-  // 현재 달 포함한 전체 목록 (최신→과거)
+  const savedMonths = Object.keys(hist).filter(ym => ym !== currentYM).sort().reverse();
   const allMonths = [currentYM, ...savedMonths];
 
-  // 테이블 렌더링
-  const tbody = document.getElementById('monthlyTableBody');
+  const tbody = document.getElementById(ctx.tbodyId);
   if (!tbody) return;
 
   tbody.innerHTML = allMonths.map((ym, idx) => {
     const isCurrent = ym === currentYM;
-    const d = isCurrent ? live : monthlyHistory[ym];
+    const d = isCurrent ? live : hist[ym];
     if (!d) return '';
 
-    const total = d.total || (d.cash + d.dollar + d.usStock + d.krStock + d.pension + d.isa);
+    const total = d.total || (d.cash + d.dollar + d.usStock + d.krStock + (d.isa||0) + (d.pension||0));
     const pct = v => total > 0 ? ((v/total)*100).toFixed(1) : '0.0';
 
-    // 전월대비 증감
     let diffHtml = '-';
     const prevYM = allMonths[idx + 1];
     if (prevYM) {
-      const prevD = prevYM === currentYM ? live : monthlyHistory[prevYM];
+      const prevD = prevYM === currentYM ? live : hist[prevYM];
       if (prevD) {
-        const prevTotal = prevD.total || (prevD.cash + prevD.dollar + prevD.usStock + prevD.krStock + prevD.pension + prevD.isa);
+        const prevTotal = prevD.total || (prevD.cash + prevD.dollar + prevD.usStock + prevD.krStock + (prevD.isa||0) + (prevD.pension||0));
         const diff = total - prevTotal;
         const cls = diff >= 0 ? 'monthly-increase' : 'monthly-decrease';
-        diffHtml = `<span class="${cls}">${diff >= 0 ? '+' : ''}${fmt(diff)}</span>`;
+        diffHtml = `<span class="${cls}">${diff >= 0?'+':''}${fmt(diff)}</span>`;
       }
     }
 
     const isLastDay = isCurrent && isLastDayOfMonth(now);
-    const badge = isCurrent
-      ? (isLastDay
-          ? `<span style="color:var(--red);font-size:10px;font-weight:700">말일</span>`
-          : `<span style="color:var(--accent-light);font-size:10px">오늘</span>`)
-      : '';
-    const dateLabel = isCurrent
-      ? `${badge}<br>${fmtDateLabel(d.date)}`
-      : fmtDateLabel(d.date);
+    const badge = isCurrent ? (isLastDay
+      ? `<span style="color:var(--red);font-size:10px;font-weight:700">말일</span>`
+      : `<span style="color:var(--accent-light);font-size:10px">오늘</span>`) : '';
+    const dateLabel = isCurrent ? `${badge}<br>${fmtDateLabel(d.date)}` : fmtDateLabel(d.date);
 
     return `<tr class="${isCurrent ? 'current-month' : ''}">
       <td>${dateLabel}</td>
@@ -734,91 +863,50 @@ function renderMonthlyTab() {
       <td style="text-align:left">
         <input class="monthly-note-input" type="text" value="${(d.note||'').replace(/"/g,'&quot;')}"
           placeholder="특이사항 입력..."
-          onblur="updateMonthlyNote('${ym}', this.value)"
+          onblur="updateMonthlyNote('${ym}','${ctx.noteCtxKey}',this.value)"
           onkeydown="if(event.key==='Enter')this.blur()">
       </td>
     </tr>`;
   }).join('');
 
-  // 마지막 저장 표시
-  const lastSavedEl = document.getElementById('monthlyLastSaved');
-  if (lastSavedEl && savedMonths.length > 0) {
-    lastSavedEl.textContent = `마지막 저장: ${savedMonths[0]}`;
-  }
+  const lastSavedEl = document.getElementById(ctx.lastSavedId);
+  if (lastSavedEl) lastSavedEl.textContent = savedMonths.length > 0 ? `마지막 저장: ${savedMonths[0]}` : '';
 
-  // 차트 업데이트
-  updateMonthlyChart(allMonths, live);
+  updateMonthlyChartFor(ctx, allMonths);
 }
 
-function updateMonthlyChart(allMonths, live) {
-  // 과거 순서 (오래된→최신)
+function updateMonthlyChartFor(ctx, allMonths) {
+  const now = new Date();
+  const currentYM = getYearMonth(now);
+  const hist = ctx.getHistory();
   const ordered = [...allMonths].reverse();
-  const labels = ordered.map(ym => {
-    if (ym === getYearMonth(new Date())) {
-      const live2 = getMonthlyLiveData();
-      return fmtDateLabel(live2.date);
-    }
-    return fmtDateLabel((monthlyHistory[ym]||{}).date || ym+'-01');
-  });
+  const labels = ordered.map(ym => fmtDateLabel((ym === currentYM ? getMonthlyLiveDataFor(ctx) : hist[ym] || {}).date || ym+'-01'));
   const values = ordered.map(ym => {
-    if (ym === getYearMonth(new Date())) {
-      const live2 = getMonthlyLiveData();
-      return live2.total || 0;
-    }
-    const d = monthlyHistory[ym];
-    return d ? (d.total || (d.cash + d.dollar + d.usStock + d.krStock + d.pension + d.isa)) : 0;
+    const d = ym === currentYM ? getMonthlyLiveDataFor(ctx) : hist[ym];
+    return d ? (d.total || (d.cash + d.dollar + d.usStock + d.krStock + (d.isa||0) + (d.pension||0))) : 0;
   });
 
-  if (!monthlyChart) {
-    const ctx = document.getElementById('monthlyTrendChart');
-    if (!ctx) return;
-    monthlyChart = new Chart(ctx, {
+  const existingChart = ctx.getChart();
+  if (!existingChart) {
+    const canvasEl = document.getElementById(ctx.trendChartId);
+    if (!canvasEl) return;
+    const newChart = new Chart(canvasEl, {
       type: 'line',
-      data: {
-        labels,
-        datasets: [{
-          data: values,
-          borderColor: '#ef4444',
-          backgroundColor: 'rgba(239,68,68,0.08)',
-          borderWidth: 2,
-          pointBackgroundColor: '#ef4444',
-          pointRadius: 5,
-          pointHoverRadius: 7,
-          fill: true,
-          tension: 0.3
-        }]
-      },
+      data: { labels, datasets: [{ data: values, borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,0.08)', borderWidth:2, pointBackgroundColor:'#ef4444', pointRadius:5, pointHoverRadius:7, fill:true, tension:0.3 }] },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: ctx => `총자산: ${fmtKRW(ctx.parsed.y)}`
-            }
-          },
-          datalabels: { display: false }
-        },
+        plugins: { legend:{display:false}, tooltip:{ callbacks:{ label: c => `총자산: ${fmtKRW(c.parsed.y)}` } }, datalabels:{display:false} },
         scales: {
-          x: {
-            ticks: { color: '#8b8fa3', font: { size: 11 } },
-            grid: { color: 'rgba(42,46,59,0.5)' }
-          },
-          y: {
-            ticks: {
-              color: '#8b8fa3', font: { size: 11 },
-              stepSize: 100000000,
-              callback: v => (v / 100000000).toFixed(0) + '억'
-            },
-            grid: { color: 'rgba(42,46,59,0.5)' }
-          }
+          x: { ticks:{color:'#8b8fa3',font:{size:11}}, grid:{color:'rgba(42,46,59,0.5)'} },
+          y: { ticks:{color:'#8b8fa3',font:{size:11},stepSize:100000000,callback:v=>(v/100000000).toFixed(0)+'억'}, grid:{color:'rgba(42,46,59,0.5)'} }
         }
       }
     });
+    ctx.setChart(newChart);
   } else {
-    monthlyChart.data.labels = labels;
-    monthlyChart.data.datasets[0].data = values;
-    monthlyChart.update();
+    existingChart.data.labels = labels;
+    existingChart.data.datasets[0].data = values;
+    existingChart.update();
   }
 }
 
@@ -833,8 +921,11 @@ function init() {
     `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 기준`;
 
   loadData();
-  loadMonthlyData();
+  loadLoanData();
+  loadMonthlyDataFor(MAIN_MONTHLY_CTX);
+  loadMonthlyDataFor(LOAN_MONTHLY_CTX);
   ACCOUNTS.forEach(a => { if (!portfolio[a.id]) portfolio[a.id] = []; });
+  LOAN_ACCOUNTS.forEach(a => { if (!loanPortfolio[a.id]) loanPortfolio[a.id] = []; });
   initCharts();
   fetchExchangeRate();
   renderAll();
@@ -861,7 +952,21 @@ function init() {
         }
       });
       // 월별 히스토리 Firebase 리스너
-      initMonthlyFirebase();
+      initMonthlyFirebaseFor(MAIN_MONTHLY_CTX);
+      initMonthlyFirebaseFor(LOAN_MONTHLY_CTX);
+      // 대출 포트폴리오 Firebase 리스너
+      if (!_fbLoanListening) {
+        _fbLoanListening = true;
+        window._fbOnValue('loanPortfolio', snap => {
+          const d = snap.val();
+          if (d) {
+            loanPortfolio = d;
+            LOAN_ACCOUNTS.forEach(a => { if (!loanPortfolio[a.id]) loanPortfolio[a.id] = []; });
+            try { localStorage.setItem('loanPortfolio_v1', JSON.stringify(loanPortfolio)); } catch(e) {}
+            if (activeTab === 'loan-portfolio') renderLoanAll();
+          }
+        });
+      }
     } else if (!window._fbOnValue) {
       setTimeout(tryFirebase, 300);
     }
@@ -1103,13 +1208,13 @@ function getItemPurchaseKRW(acc, item) {
 }
 
 function getAccountTotal(accId) {
-  const acc = ACCOUNTS.find(a => a.id === accId);
-  return (portfolio[accId] || []).reduce((sum, item) => sum + getItemEvalKRW(acc, item), 0);
+  const acc = getAccountsFor(accId).find(a => a.id === accId);
+  return (getPortfolioFor(accId)[accId] || []).reduce((sum, item) => sum + getItemEvalKRW(acc, item), 0);
 }
 
 function getAccountPurchaseTotal(accId) {
-  const acc = ACCOUNTS.find(a => a.id === accId);
-  return (portfolio[accId] || []).reduce((sum, item) => sum + getItemPurchaseKRW(acc, item), 0);
+  const acc = getAccountsFor(accId).find(a => a.id === accId);
+  return (getPortfolioFor(accId)[accId] || []).reduce((sum, item) => sum + getItemPurchaseKRW(acc, item), 0);
 }
 
 // ===================================================================
@@ -1298,8 +1403,7 @@ function renderAll() {
 
   updateCharts();
   renderAccounts();
-  // 월별 탭이 열려있으면 현재 자산 실시간 반영
-  if (activeTab === 'monthly') renderMonthlyTab();
+  if (activeTab === 'monthly') renderMonthlyTabFor(MAIN_MONTHLY_CTX);
 }
 
 function renderAccounts() {
@@ -1308,10 +1412,176 @@ function renderAccounts() {
   ACCOUNTS.forEach(acc => container.appendChild(createAccountCard(acc)));
 }
 
+// ===================================================================
+// LOAN PORTFOLIO — 렌더/저장/차트
+// ===================================================================
+let loanCategoryChart = null, loanHoldingChart = null;
+
+function initLoanCharts() {
+  const doughnutOpts = (cutout) => ({
+    responsive: true, maintainAspectRatio: false, cutout,
+    plugins: { legend: { display: false }, tooltip: { callbacks: {
+      label: ctx => {
+        const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+        const pct = total > 0 ? ((ctx.parsed/total)*100).toFixed(1) : 0;
+        return `${ctx.label}: ${fmtKRW(ctx.parsed)} (${pct}%)`;
+      }
+    }}}
+  });
+  loanCategoryChart = new Chart(document.getElementById('loanCategoryChart'), {
+    type: 'doughnut',
+    data: { labels: [], datasets: [{ data: [], backgroundColor: CATEGORY_COLORS, borderWidth: 0, hoverOffset: 8 }] },
+    options: doughnutOpts('65%')
+  });
+  loanHoldingChart = new Chart(document.getElementById('loanHoldingChart'), {
+    type: 'doughnut',
+    data: { labels: [], datasets: [{ data: [], backgroundColor: HOLDING_COLORS, borderWidth: 0, hoverOffset: 8 }] },
+    options: doughnutOpts('55%')
+  });
+}
+
+function updateLoanCharts() {
+  if (!loanCategoryChart) return;
+  const catMap = {};
+  const cashTotal = getAccountTotal('loan_cash');
+  if (cashTotal > 0) catMap['현금'] = cashTotal;
+  const dollarTotal = getAccountTotal('loan_dollar');
+  if (dollarTotal > 0) catMap['달러'] = dollarTotal;
+  const domTotal = getAccountTotal('loan_domestic');
+  if (domTotal > 0) catMap['국내주식'] = domTotal;
+  const isaTotal = getAccountTotal('loan_isa');
+  if (isaTotal > 0) catMap['ISA'] = isaTotal;
+  const penTotal = getAccountTotal('loan_pension');
+  if (penTotal > 0) catMap['연금'] = penTotal;
+  const foreignTotal = getAccountTotal('loan_foreign');
+  if (foreignTotal > 0) catMap['해외주식'] = foreignTotal;
+
+  const catLabels = Object.keys(catMap);
+  const catData   = Object.values(catMap);
+  loanCategoryChart.data.labels = catLabels;
+  loanCategoryChart.data.datasets[0].data = catData;
+  loanCategoryChart.update();
+  renderLegend('loanCategoryLegend', catLabels, catData, CATEGORY_COLORS);
+
+  const hMap = {};
+  LOAN_ACCOUNTS.forEach(acc => {
+    (loanPortfolio[acc.id] || []).forEach(item => {
+      const val = getItemEvalKRW(acc, item);
+      if (val > 0) { const key = item.name || '미지정'; hMap[key] = (hMap[key] || 0) + val; }
+    });
+  });
+  const sorted = Object.entries(hMap).sort((a,b) => b[1]-a[1]);
+  loanHoldingChart.data.labels = sorted.map(e => e[0]);
+  loanHoldingChart.data.datasets[0].data = sorted.map(e => e[1]);
+  loanHoldingChart.update();
+  renderLegend('loanHoldingLegend', sorted.map(e=>e[0]), sorted.map(e=>e[1]), HOLDING_COLORS);
+}
+
+function renderLoanAll() {
+  if (activeTab !== 'loan-portfolio') return;
+  const now = new Date();
+  document.getElementById('loanCurrentDate').textContent =
+    `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 기준`;
+  document.getElementById('loanExchangeRateDisplay').textContent = exchangeRate.toFixed(2) + ' 원';
+
+  let grandEval = 0, grandPurchase = 0;
+  LOAN_ACCOUNTS.forEach(acc => {
+    grandEval += getAccountTotal(acc.id);
+    grandPurchase += getAccountPurchaseTotal(acc.id);
+  });
+  document.getElementById('loanTotalValue').textContent = fmtKRW(grandEval);
+  const pnl = grandEval - grandPurchase;
+  const pnlPct = grandPurchase > 0 ? (pnl / grandPurchase) * 100 : 0;
+  const pnlEl = document.getElementById('loanTotalPnl');
+  if (grandPurchase > 0 && grandPurchase !== grandEval) {
+    pnlEl.className = `total-pnl ${pnl >= 0 ? 'positive' : 'negative'}`;
+    pnlEl.textContent = `${pnl >= 0?'+':''}${fmt(pnl)} 원 (${fmtPct(pnlPct)})`;
+  } else { pnlEl.textContent = ''; }
+
+  updateLoanCharts();
+  renderLoanAccounts();
+  if (activeTab === 'loan-monthly') renderMonthlyTabFor(LOAN_MONTHLY_CTX);
+}
+
+function renderLoanAccounts() {
+  const container = document.getElementById('loanAccountsContainer');
+  if (!container) return;
+  container.innerHTML = '';
+  LOAN_ACCOUNTS.forEach(acc => container.appendChild(createAccountCard(acc)));
+}
+
+function saveLoanData() {
+  if (window._fbSet) window._fbSet('loanPortfolio', loanPortfolio).catch(e => console.warn(e));
+  try { localStorage.setItem('loanPortfolio_v1', JSON.stringify(loanPortfolio)); } catch(e) {}
+}
+
+function loadLoanData() {
+  try {
+    const saved = localStorage.getItem('loanPortfolio_v1');
+    if (saved) loanPortfolio = JSON.parse(saved);
+  } catch(e) {}
+}
+
+function exportLoanJSON() {
+  const blob = new Blob([JSON.stringify({ version:1, data:loanPortfolio, exchangeRate, exportDate: new Date().toISOString() }, null, 2)], { type:'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `loan_portfolio_${new Date().toISOString().slice(0,10)}.json`; a.click();
+  showToast('내보내기 완료');
+}
+
+function importLoanJSON(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      loanPortfolio = imported.data || imported;
+      if (imported.exchangeRate) exchangeRate = imported.exchangeRate;
+      LOAN_ACCOUNTS.forEach(a => { if (!loanPortfolio[a.id]) loanPortfolio[a.id] = []; });
+      saveLoanData(); renderLoanAll(); showToast('불러오기 완료');
+    } catch(err) { showToast('파일을 읽을 수 없습니다'); }
+  };
+  reader.readAsText(file); event.target.value = '';
+}
+
+async function refreshLoanAllPrices() {
+  const statusEl = document.getElementById('loanStatusText');
+  if (!statusEl) return;
+  const symbolSet = new Set();
+  LOAN_ACCOUNTS.forEach(acc => {
+    if (acc.type !== 'stock') return;
+    (loanPortfolio[acc.id] || []).forEach(item => { if (item.symbol) symbolSet.add(item.symbol); });
+  });
+  const symbols = [...symbolSet];
+  if (symbols.length === 0) { showToast('조회할 종목이 없습니다'); return; }
+  statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (0/${symbols.length})`;
+  const priceCache = {}; let done = 0;
+  for (const sym of symbols) {
+    const result = await fetchStockPrice(sym);
+    if (result) priceCache[sym] = result;
+    done++;
+    statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (${done}/${symbols.length})`;
+  }
+  let total = 0;
+  LOAN_ACCOUNTS.forEach(acc => {
+    if (acc.type !== 'stock') return;
+    (loanPortfolio[acc.id] || []).forEach(item => {
+      if (!item.symbol) return;
+      const r = priceCache[item.symbol];
+      if (r) { item.price = r.price; item.previousClose = r.previousClose; }
+      total++;
+    });
+  });
+  statusEl.textContent = `마지막 시세 조회: ${new Date().toLocaleTimeString('ko-KR')}`;
+  saveLoanData(); renderLoanAll();
+  showToast(`${total}개 종목 시세 업데이트 완료`);
+  checkAutoSaveMonthlyFor(LOAN_MONTHLY_CTX);
+}
+
 function createAccountCard(acc) {
   const card = document.createElement('div');
   card.className = 'account-card';
-  const items = portfolio[acc.id] || [];
+  const items = getPortfolioFor(acc.id)[acc.id] || [];
   const evalTotal = getAccountTotal(acc.id);
   const purchaseTotal = getAccountPurchaseTotal(acc.id);
   const pnl = evalTotal - purchaseTotal;
@@ -1648,19 +1918,19 @@ document.addEventListener('click', e => {
 function addCashItem(accId) {
   const name = document.getElementById(`add-${accId}-name`).value || '현금';
   const amount = parseNum(document.getElementById(`add-${accId}-amount`).value);
-  portfolio[accId].push({ name, amount });
-  saveData(); renderAll();
+  getPortfolioFor(accId)[accId].push({ name, amount });
+  saveAndRenderFor(accId);
 }
 
 function addDollarItem(accId) {
   const name = document.getElementById(`add-${accId}-name`).value || '달러';
   const amountUSD = parseNum(document.getElementById(`add-${accId}-usd`).value);
-  portfolio[accId].push({ name, amountUSD });
-  saveData(); renderAll();
+  getPortfolioFor(accId)[accId].push({ name, amountUSD });
+  saveAndRenderFor(accId);
 }
 
 async function addStockItem(accId) {
-  const acc = ACCOUNTS.find(a => a.id === accId);
+  const acc = getAccountsFor(accId).find(a => a.id === accId);
   const searchInput = document.getElementById(`search-${accId}`);
   const qtyInput = document.getElementById(`add-${accId}-qty`);
   const avgInput = document.getElementById(`add-${accId}-avg`);
@@ -1689,7 +1959,7 @@ async function addStockItem(accId) {
     }
   }
 
-  portfolio[accId].push(item);
+  getPortfolioFor(accId)[accId].push(item);
   selectedStock[accId] = null;
   searchInput.value = '';
   qtyInput.value = '';
@@ -1697,13 +1967,13 @@ async function addStockItem(accId) {
   if (brokerInput) brokerInput.value = '';
   document.getElementById(`search-status-${accId}`).textContent = '';
 
-  saveData(); renderAll();
+  saveAndRenderFor(accId);
   showToast(`${item.name} 추가 완료`);
 }
 
 function updateField(accId, index, field, value) {
-  portfolio[accId][index][field] = value;
-  saveData(); renderAll();
+  getPortfolioFor(accId)[accId][index][field] = value;
+  saveAndRenderFor(accId);
 }
 
 // ===== DRAG & DROP 정렬 =====
@@ -1722,29 +1992,30 @@ function onDrop(e, accId, toIdx) {
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
   if (_dragAccId !== accId || _dragIdx === null || _dragIdx === toIdx) return;
-  const arr = portfolio[accId];
+  const arr = getPortfolioFor(accId)[accId];
   const [moved] = arr.splice(_dragIdx, 1);
   arr.splice(toIdx, 0, moved);
   _dragIdx = null;
-  saveData(); renderAll();
+  saveAndRenderFor(accId);
 }
 
 function removeItem(accId, index) {
-  const name = portfolio[accId][index]?.name || '';
-  portfolio[accId].splice(index, 1);
-  saveData(); renderAll();
+  const pf = getPortfolioFor(accId);
+  const name = pf[accId][index]?.name || '';
+  pf[accId].splice(index, 1);
+  saveAndRenderFor(accId);
   showToast(`${name} 삭제됨`);
 }
 
 async function refreshSingle(accId, index) {
-  const item = portfolio[accId][index];
+  const item = getPortfolioFor(accId)[accId][index];
   if (!item?.symbol) { showToast('종목 심볼이 없어 조회할 수 없습니다'); return; }
 
   const data = await fetchStockPrice(item.symbol);
   if (data) {
     item.price = data.price;
     item.previousClose = data.previousClose;
-    saveData(); renderAll();
+    saveAndRenderFor(accId);
     showToast(`${item.name} 시세 업데이트`);
   } else {
     showToast('시세 조회 실패');
