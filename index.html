@@ -879,7 +879,7 @@ function renderTableForAccount(acc, items) {
       ondragleave="onDragLeave(event)"
       ondrop="onDrop(event,'${acc.id}',${i})">
       <td class="drag-handle">⠿</td>
-      <td><input class="cell-edit" type="text" value="${item.name||''}" style="text-align:left;width:180px"
+      <td style="text-align:left"><input class="cell-edit" type="text" value="${item.name||''}" style="text-align:left;width:180px"
         onblur="updateField('${acc.id}',${i},'name',this.value)"
         onkeydown="if(event.key==='Enter')this.blur()"></td>
       <td>${makeNumInput(item.amount||0, acc.id, i, 'amount', false)}</td>
