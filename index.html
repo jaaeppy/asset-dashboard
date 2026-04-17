@@ -430,14 +430,14 @@
           <th style="min-width:80px">달러</th>
           <th style="min-width:96px">미국주식</th>
           <th style="min-width:96px">국내주식</th>
-          <th style="min-width:88px">연금</th>
           <th style="min-width:88px">ISA</th>
+          <th style="min-width:88px">연금</th>
           <th style="border-left:1px solid var(--border);min-width:44px">현금</th>
           <th style="min-width:44px">달러</th>
           <th style="min-width:44px">미주</th>
           <th style="min-width:44px">국주</th>
-          <th style="min-width:44px">연금</th>
           <th style="min-width:44px">ISA</th>
+          <th style="min-width:44px">연금</th>
         </tr>
       </thead>
       <tbody id="monthlyTableBody"></tbody>
@@ -722,14 +722,14 @@ function renderMonthlyTab() {
       <td>${fmt(d.dollar||0)}</td>
       <td>${fmt(d.usStock||0)}</td>
       <td>${fmt(d.krStock||0)}</td>
-      <td>${fmt(d.pension||0)}</td>
       <td>${fmt(d.isa||0)}</td>
+      <td>${fmt(d.pension||0)}</td>
       <td class="monthly-pct" style="border-left:1px solid var(--border)">${pct(d.cash||0)}</td>
       <td class="monthly-pct">${pct(d.dollar||0)}</td>
       <td class="monthly-pct">${pct(d.usStock||0)}</td>
       <td class="monthly-pct">${pct(d.krStock||0)}</td>
-      <td class="monthly-pct">${pct(d.pension||0)}</td>
       <td class="monthly-pct">${pct(d.isa||0)}</td>
+      <td class="monthly-pct">${pct(d.pension||0)}</td>
       <td style="border-left:1px solid var(--border)">${diffHtml}</td>
       <td style="text-align:left">
         <input class="monthly-note-input" type="text" value="${(d.note||'').replace(/"/g,'&quot;')}"
