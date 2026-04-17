@@ -51,8 +51,9 @@
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      padding: 20px;
+      padding: 0 20px 20px 20px;
     }
+    .tab-content { padding-top: 24px; }
 
     /* ===== HEADER ===== */
     .header {
@@ -258,17 +259,106 @@
       .total-value { font-size: 24px; }
       .search-input { width: 200px; }
       .add-input { width: 90px; }
-
       /* 계좌 헤더: 뱃지+토글 위, 소계 아래로 분리 */
       .account-header { flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 16px; }
       .account-header h3 { width: 100%; display: flex; justify-content: space-between; }
       .account-subtotal { width: 100%; justify-content: flex-end; gap: 16px; }
       .subtotal-value { font-size: 13px; }
       .subtotal-label { font-size: 10px; }
+      .gnb { padding: 0 12px; }
+      .gnb-logo { font-size: 14px; }
+      .gnb-tab { padding: 0 12px; font-size: 12px; }
+    }
+
+    /* ===== GNB ===== */
+    .gnb {
+      display: flex; align-items: center; gap: 0;
+      background: var(--card); border-bottom: 1px solid var(--border);
+      padding: 0 24px; margin: -20px -20px 24px -20px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .gnb-logo {
+      font-size: 15px; font-weight: 700; color: var(--accent-light);
+      padding: 0 20px 0 0; margin-right: 8px;
+      border-right: 1px solid var(--border);
+      line-height: 52px; white-space: nowrap;
+    }
+    .gnb-tabs { display: flex; height: 52px; }
+    .gnb-tab {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-muted); font-size: 13px; font-family: inherit;
+      font-weight: 500; padding: 0 20px; height: 100%;
+      border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s;
+    }
+    .gnb-tab:hover { color: var(--text); }
+    .gnb-tab.active { color: var(--accent-light); border-bottom-color: var(--accent); }
+    .tab-content.hidden { display: none; }
+
+    /* ===== MONTHLY TAB ===== */
+    .monthly-toolbar {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 16px; gap: 12px; flex-wrap: wrap;
+    }
+    .monthly-toolbar h2 { font-size: 16px; font-weight: 600; }
+    .monthly-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .monthly-table {
+      width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap;
+    }
+    .monthly-table thead tr:first-child th {
+      background: rgba(108,123,255,0.12); color: var(--text-muted);
+      padding: 8px 10px; font-weight: 600; font-size: 11px;
+      border-bottom: 1px solid var(--border); text-align: right;
+    }
+    .monthly-table thead tr:first-child th:first-child { text-align: center; }
+    .monthly-table thead tr.sub-header th {
+      background: rgba(108,123,255,0.06); color: var(--text-muted);
+      padding: 4px 10px; font-weight: 500; font-size: 10px;
+      border-bottom: 2px solid var(--border); text-align: right;
+    }
+    .monthly-table tbody td {
+      padding: 7px 10px; text-align: right;
+      border-bottom: 1px solid rgba(42,46,59,0.4); font-size: 12px;
+    }
+    .monthly-table tbody td:first-child { text-align: center; font-weight: 600; color: var(--text-muted); }
+    .monthly-table tbody tr:hover { background: var(--card-hover); }
+    .monthly-table tbody tr.current-month { background: rgba(108,123,255,0.07); }
+    .monthly-table tbody tr.current-month td:first-child { color: var(--accent-light); }
+    .monthly-increase { color: var(--red); }
+    .monthly-decrease { color: var(--blue); }
+    .monthly-note-input {
+      background: transparent; border: none; color: var(--text-muted);
+      font-size: 11px; font-family: inherit; width: 180px; outline: none;
+      text-align: left; cursor: text;
+    }
+    .monthly-note-input:focus {
+      background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--accent);
+      color: var(--text);
+    }
+    .monthly-pct { color: var(--text-muted); font-size: 11px; }
+    .monthly-chart-card {
+      background: var(--card); border-radius: 16px;
+      border: 1px solid var(--border); padding: 24px; margin-top: 20px;
+    }
+    .monthly-chart-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 16px; color: var(--text-muted); }
+    .monthly-chart-wrap { position: relative; height: 320px; }
+    .section-divider {
+      border: none; border-top: 1px solid var(--border); margin: 0 0 4px 0;
     }
   </style>
 </head>
 <body>
+
+<!-- GNB -->
+<nav class="gnb">
+  <div class="gnb-logo">📊 자산관리</div>
+  <div class="gnb-tabs">
+    <button class="gnb-tab active" id="tab-btn-portfolio" onclick="switchTab('portfolio')">포트폴리오</button>
+    <button class="gnb-tab" id="tab-btn-monthly" onclick="switchTab('monthly')">월별 자산</button>
+  </div>
+</nav>
+
+<!-- 포트폴리오 탭 -->
+<div id="tab-portfolio" class="tab-content">
 
 <div class="header">
   <div class="header-left">
@@ -307,6 +397,53 @@
 </div>
 
 <div class="accounts-section" id="accountsContainer"></div>
+
+</div><!-- /tab-portfolio -->
+
+<!-- 월별 자산 탭 -->
+<div id="tab-monthly" class="tab-content hidden">
+  <div class="monthly-toolbar">
+    <h2>월별 자산 현황</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:12px;color:var(--text-muted)" id="monthlyLastSaved"></span>
+      <button class="btn btn-outline btn-sm" onclick="saveMonthlySnapshot()">📌 이번달 스냅샷 저장</button>
+    </div>
+  </div>
+  <div class="monthly-table-wrap">
+    <table class="monthly-table">
+      <thead>
+        <tr>
+          <th rowspan="2" style="text-align:center;min-width:72px">일</th>
+          <th rowspan="2" style="min-width:64px">환율</th>
+          <th rowspan="2" style="min-width:100px">총자산</th>
+          <th colspan="6" style="text-align:center;border-left:1px solid var(--border)">금액 (원)</th>
+          <th colspan="6" style="text-align:center;border-left:1px solid var(--border)">비중 (%)</th>
+          <th rowspan="2" style="min-width:90px;border-left:1px solid var(--border)">전월대비 증감</th>
+          <th rowspan="2" style="text-align:left;min-width:160px">특이사항</th>
+        </tr>
+        <tr class="sub-header">
+          <th style="border-left:1px solid var(--border);min-width:88px">현금</th>
+          <th style="min-width:80px">달러</th>
+          <th style="min-width:96px">미국주식</th>
+          <th style="min-width:96px">국내주식</th>
+          <th style="min-width:88px">연금</th>
+          <th style="min-width:88px">ISA</th>
+          <th style="border-left:1px solid var(--border);min-width:44px">현금</th>
+          <th style="min-width:44px">달러</th>
+          <th style="min-width:44px">미주</th>
+          <th style="min-width:44px">국주</th>
+          <th style="min-width:44px">연금</th>
+          <th style="min-width:44px">ISA</th>
+        </tr>
+      </thead>
+      <tbody id="monthlyTableBody"></tbody>
+    </table>
+  </div>
+  <div class="monthly-chart-card">
+    <h2>총 자산 추이</h2>
+    <div class="monthly-chart-wrap"><canvas id="monthlyTrendChart"></canvas></div>
+  </div>
+</div><!-- /tab-monthly -->
 
 <div class="toast" id="toast"></div>
 
@@ -373,6 +510,252 @@ let searchResults = {}; // store results per accId
 let searchActiveIdx = {}; // active index per accId
 
 // ===================================================================
+// TAB NAVIGATION
+// ===================================================================
+let activeTab = 'portfolio';
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById('tab-portfolio').classList.toggle('hidden', tab !== 'portfolio');
+  document.getElementById('tab-monthly').classList.toggle('hidden', tab !== 'monthly');
+  document.getElementById('tab-btn-portfolio').classList.toggle('active', tab === 'portfolio');
+  document.getElementById('tab-btn-monthly').classList.toggle('active', tab === 'monthly');
+  if (tab === 'monthly') renderMonthlyTab();
+}
+
+// ===================================================================
+// MONTHLY HISTORY
+// ===================================================================
+let monthlyHistory = {};         // { "2026-04": { date, exchangeRate, cash, dollar, usStock, krStock, pension, isa, note } }
+let monthlyChart = null;
+let _fbMonthlyListening = false;
+
+function getYearMonth(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
+}
+function fmtMonthLabel(ym) {
+  // "2026-04" → "26/04"
+  return ym.slice(2).replace('-','/');
+}
+function fmtDateLabel(dateStr) {
+  // "2026-04-17" → "26/04/17"
+  return dateStr ? dateStr.slice(2).replace(/-/g,'/') : '';
+}
+
+function getMonthlyLiveData() {
+  const now = new Date();
+  const cash    = getAccountTotal('cash');
+  const dollar  = getAccountTotal('dollar');   // already KRW
+  const usStock = getAccountTotal('foreign');
+  const krStock = getAccountTotal('domestic');
+  const pension = getAccountTotal('pension');
+  const isa     = getAccountTotal('isa');
+  const total   = cash + dollar + usStock + krStock + pension + isa;
+  return {
+    date: now.toISOString().slice(0,10),
+    exchangeRate: Math.round(exchangeRate * 100) / 100,
+    cash, dollar, usStock, krStock, pension, isa, total,
+    note: (monthlyHistory[getYearMonth(now)] || {}).note || ''
+  };
+}
+
+function saveMonthlySnapshot() {
+  const now = new Date();
+  const ym = getYearMonth(now);
+  const live = getMonthlyLiveData();
+  monthlyHistory[ym] = live;
+  saveMonthlyData();
+  renderMonthlyTab();
+  showToast(`${ym} 스냅샷 저장 완료`);
+}
+
+function updateMonthlyNote(ym, value) {
+  if (!monthlyHistory[ym]) monthlyHistory[ym] = {};
+  monthlyHistory[ym].note = value;
+  saveMonthlyData();
+}
+
+function saveMonthlyData() {
+  if (window._fbSet) {
+    window._fbSet('monthlyHistory', monthlyHistory).catch(e => console.warn('Firebase monthly save error', e));
+  }
+  try { localStorage.setItem('monthlyHistory_v1', JSON.stringify(monthlyHistory)); } catch(e) {}
+}
+
+function loadMonthlyData() {
+  try {
+    const saved = localStorage.getItem('monthlyHistory_v1');
+    if (saved) monthlyHistory = JSON.parse(saved);
+  } catch(e) {}
+}
+
+function initMonthlyFirebase() {
+  if (!window._fbOnValue || _fbMonthlyListening) return;
+  _fbMonthlyListening = true;
+  window._fbOnValue('monthlyHistory', snapshot => {
+    const data = snapshot.val();
+    if (data) {
+      monthlyHistory = data;
+      try { localStorage.setItem('monthlyHistory_v1', JSON.stringify(monthlyHistory)); } catch(e) {}
+    }
+    if (activeTab === 'monthly') renderMonthlyTab();
+  });
+}
+
+function renderMonthlyTab() {
+  const now = new Date();
+  const currentYM = getYearMonth(now);
+  const live = getMonthlyLiveData();
+
+  // 정렬된 월 목록 (최신순)
+  const savedMonths = Object.keys(monthlyHistory)
+    .filter(ym => ym !== currentYM)
+    .sort().reverse();
+
+  // 현재 달 포함한 전체 목록 (최신→과거)
+  const allMonths = [currentYM, ...savedMonths];
+
+  // 테이블 렌더링
+  const tbody = document.getElementById('monthlyTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = allMonths.map((ym, idx) => {
+    const isCurrent = ym === currentYM;
+    const d = isCurrent ? live : monthlyHistory[ym];
+    if (!d) return '';
+
+    const total = d.total || (d.cash + d.dollar + d.usStock + d.krStock + d.pension + d.isa);
+    const pct = v => total > 0 ? ((v/total)*100).toFixed(1) : '0.0';
+
+    // 전월대비 증감
+    let diffHtml = '-';
+    const prevYM = allMonths[idx + 1];
+    if (prevYM) {
+      const prevD = prevYM === currentYM ? live : monthlyHistory[prevYM];
+      if (prevD) {
+        const prevTotal = prevD.total || (prevD.cash + prevD.dollar + prevD.usStock + prevD.krStock + prevD.pension + prevD.isa);
+        const diff = total - prevTotal;
+        const cls = diff >= 0 ? 'monthly-increase' : 'monthly-decrease';
+        diffHtml = `<span class="${cls}">${diff >= 0 ? '+' : ''}${fmt(diff)}</span>`;
+      }
+    }
+
+    const dateLabel = isCurrent
+      ? `<span style="color:var(--accent-light);font-size:10px">현재</span><br>${fmtDateLabel(d.date)}`
+      : fmtDateLabel(d.date);
+
+    return `<tr class="${isCurrent ? 'current-month' : ''}">
+      <td>${dateLabel}</td>
+      <td>${(d.exchangeRate||0).toFixed(2)}</td>
+      <td style="font-weight:600">${fmt(total)}</td>
+      <td style="border-left:1px solid var(--border)">${fmt(d.cash||0)}</td>
+      <td>${fmt(d.dollar||0)}</td>
+      <td>${fmt(d.usStock||0)}</td>
+      <td>${fmt(d.krStock||0)}</td>
+      <td>${fmt(d.pension||0)}</td>
+      <td>${fmt(d.isa||0)}</td>
+      <td class="monthly-pct" style="border-left:1px solid var(--border)">${pct(d.cash||0)}</td>
+      <td class="monthly-pct">${pct(d.dollar||0)}</td>
+      <td class="monthly-pct">${pct(d.usStock||0)}</td>
+      <td class="monthly-pct">${pct(d.krStock||0)}</td>
+      <td class="monthly-pct">${pct(d.pension||0)}</td>
+      <td class="monthly-pct">${pct(d.isa||0)}</td>
+      <td style="border-left:1px solid var(--border)">${diffHtml}</td>
+      <td style="text-align:left">
+        <input class="monthly-note-input" type="text" value="${(d.note||'').replace(/"/g,'&quot;')}"
+          placeholder="특이사항 입력..."
+          onblur="updateMonthlyNote('${ym}', this.value)"
+          onkeydown="if(event.key==='Enter')this.blur()">
+      </td>
+    </tr>`;
+  }).join('');
+
+  // 마지막 저장 표시
+  const lastSavedEl = document.getElementById('monthlyLastSaved');
+  if (lastSavedEl && savedMonths.length > 0) {
+    lastSavedEl.textContent = `마지막 저장: ${savedMonths[0]}`;
+  }
+
+  // 차트 업데이트
+  updateMonthlyChart(allMonths, live);
+}
+
+function updateMonthlyChart(allMonths, live) {
+  // 과거 순서 (오래된→최신)
+  const ordered = [...allMonths].reverse();
+  const labels = ordered.map(ym => {
+    if (ym === getYearMonth(new Date())) {
+      const live2 = getMonthlyLiveData();
+      return fmtDateLabel(live2.date);
+    }
+    return fmtDateLabel((monthlyHistory[ym]||{}).date || ym+'-01');
+  });
+  const values = ordered.map(ym => {
+    if (ym === getYearMonth(new Date())) {
+      const live2 = getMonthlyLiveData();
+      return live2.total || 0;
+    }
+    const d = monthlyHistory[ym];
+    return d ? (d.total || (d.cash + d.dollar + d.usStock + d.krStock + d.pension + d.isa)) : 0;
+  });
+
+  if (!monthlyChart) {
+    const ctx = document.getElementById('monthlyTrendChart');
+    if (!ctx) return;
+    monthlyChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239,68,68,0.08)',
+          borderWidth: 2,
+          pointBackgroundColor: '#ef4444',
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => `총자산: ${fmtKRW(ctx.parsed.y)}`
+            }
+          },
+          datalabels: { display: false }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#8b8fa3', font: { size: 11 } },
+            grid: { color: 'rgba(42,46,59,0.5)' }
+          },
+          y: {
+            ticks: {
+              color: '#8b8fa3', font: { size: 11 },
+              callback: v => {
+                if (v >= 100000000) return (v/100000000).toFixed(0) + '억';
+                if (v >= 10000000)  return (v/10000000).toFixed(0) + '천만';
+                return fmt(v);
+              }
+            },
+            grid: { color: 'rgba(42,46,59,0.5)' }
+          }
+        }
+      }
+    });
+  } else {
+    monthlyChart.data.labels = labels;
+    monthlyChart.data.datasets[0].data = values;
+    monthlyChart.update();
+  }
+}
+
+// ===================================================================
 // INIT
 // ===================================================================
 let _fbListening = false;
@@ -383,6 +766,7 @@ function init() {
     `${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 기준`;
 
   loadData();
+  loadMonthlyData();
   ACCOUNTS.forEach(a => { if (!portfolio[a.id]) portfolio[a.id] = []; });
   initCharts();
   fetchExchangeRate();
@@ -400,10 +784,11 @@ function init() {
           ACCOUNTS.forEach(a => { if (!portfolio[a.id]) portfolio[a.id] = []; });
           try { localStorage.setItem('portfolio_v2', JSON.stringify(portfolio)); } catch(e) {}
           renderAll();
-          // 최초 로드 시 자동 시세 조회
           if (firstLoad) { firstLoad = false; refreshAllPrices(); }
         }
       });
+      // 월별 히스토리 Firebase 리스너
+      initMonthlyFirebase();
     } else if (!window._fbOnValue) {
       setTimeout(tryFirebase, 300);
     }
