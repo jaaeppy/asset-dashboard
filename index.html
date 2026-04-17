@@ -138,8 +138,18 @@
     /* 드래그 정렬 */
     tr.dragging { opacity: 0.4; }
     tr.drag-over { border-top: 2px solid var(--accent); }
-    td.drag-handle { cursor: grab; color: var(--text-muted); font-size: 16px; padding: 0 6px; user-select: none; }
+    td.drag-handle { cursor: grab; color: var(--text-muted); font-size: 11px; padding: 0 2px; width: 16px; min-width: 16px; max-width: 16px; text-align: center; user-select: none; }
     td.drag-handle:active { cursor: grabbing; }
+    /* 현금 테이블 */
+    table.cash-table { width: auto; min-width: 400px; }
+    table.cash-table thead th:first-child { padding: 10px 2px; }
+    table.cash-table tbody td { padding: 6px 8px; }
+    table.cash-table tbody td:first-child { padding: 6px 2px; }
+    .cash-name-cell { display: flex; align-items: center; gap: 4px; }
+    .cash-name-label { font-size: 13px; color: var(--text); white-space: nowrap; min-width: 80px; }
+    .btn-pencil { background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 11px; padding: 2px; opacity: 0.5; line-height: 1; }
+    .btn-pencil:hover { opacity: 1; color: var(--accent-light); }
+    .cash-name-input { background: rgba(255,255,255,0.06); border: 1px solid var(--accent); color: var(--text); padding: 3px 6px; border-radius: 4px; font-size: 13px; font-family: inherit; outline: none; width: 160px; }
 
     /* ===== SEARCH / ADD ===== */
     .add-area {
@@ -871,20 +881,30 @@ function renderTableForAccount(acc, items) {
   if (items.length === 0) return '<div class="empty-state">항목을 추가해주세요</div>';
 
   if (acc.type === 'cash') {
-    return `<table><thead><tr>
-      <th width="24"></th><th style="text-align:left">항목</th><th>금액 (원)</th><th width="40"></th>
-    </tr></thead><tbody>${items.map((item, i) => `<tr draggable="true"
-      ondragstart="onDragStart(event,'${acc.id}',${i})"
-      ondragover="onDragOver(event)"
-      ondragleave="onDragLeave(event)"
-      ondrop="onDrop(event,'${acc.id}',${i})">
-      <td class="drag-handle">⠿</td>
-      <td><input class="cell-edit" type="text" value="${item.name||''}" style="text-align:left;width:180px"
-        onblur="updateField('${acc.id}',${i},'name',this.value)"
-        onkeydown="if(event.key==='Enter')this.blur()"></td>
-      <td>${makeNumInput(item.amount||0, acc.id, i, 'amount', false)}</td>
-      <td><button class="btn-icon" onclick="removeItem('${acc.id}',${i})">×</button></td>
-    </tr>`).join('')}</tbody></table>`;
+    return `<table class="cash-table"><thead><tr>
+      <th style="width:16px;padding:0 2px"></th><th style="text-align:left">항목</th><th style="text-align:right">금액 (원)</th><th style="width:36px"></th>
+    </tr></thead><tbody>${items.map((item, i) => {
+      const isEditing = _editingCashName && _editingCashName.accId === acc.id && _editingCashName.idx === i;
+      const nameCell = isEditing
+        ? `<input class="cash-name-input" id="cash-edit-${acc.id}-${i}" type="text" value="${(item.name||'').replace(/"/g,'&quot;')}"
+            data-accid="${acc.id}" data-idx="${i}"
+            onblur="saveCashName(this.dataset.accid, parseInt(this.dataset.idx), this.value)"
+            onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){cancelCashName();}">`
+        : `<div class="cash-name-cell">
+            <span class="cash-name-label">${item.name||'(이름 없음)'}</span>
+            <button class="btn-pencil" data-accid="${acc.id}" data-idx="${i}" title="이름 수정">✏</button>
+          </div>`;
+      return `<tr draggable="true"
+        ondragstart="onDragStart(event,'${acc.id}',${i})"
+        ondragover="onDragOver(event)"
+        ondragleave="onDragLeave(event)"
+        ondrop="onDrop(event,'${acc.id}',${i})">
+        <td class="drag-handle">⠿</td>
+        <td>${nameCell}</td>
+        <td style="text-align:right">${makeNumInput(item.amount||0, acc.id, i, 'amount', false)}</td>
+        <td><button class="btn-icon" onclick="removeItem('${acc.id}',${i})">×</button></td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
   }
 
   if (acc.type === 'dollar') {
@@ -1231,9 +1251,41 @@ function updateField(accId, index, field, value) {
   saveData(); renderAll();
 }
 
+// ===== 현금 항목명 연필 편집 =====
+let _editingCashName = null;
+
+function startEditCashName(accId, idx) {
+  _editingCashName = { accId, idx };
+  renderAll();
+  setTimeout(() => {
+    const input = document.getElementById(`cash-edit-${accId}-${idx}`);
+    if (input) { input.focus(); input.select(); }
+  }, 30);
+}
+
+function saveCashName(accId, idx, value) {
+  _editingCashName = null;
+  portfolio[accId][idx]['name'] = value.trim() || portfolio[accId][idx]['name'];
+  saveData(); renderAll();
+}
+
+function cancelCashName() {
+  _editingCashName = null;
+  renderAll();
+}
+
+// 연필 버튼 이벤트 위임
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.btn-pencil');
+  if (btn) {
+    startEditCashName(btn.dataset.accid, parseInt(btn.dataset.idx));
+  }
+});
+
 // ===== DRAG & DROP 정렬 =====
 let _dragAccId = null, _dragIdx = null;
 function onDragStart(e, accId, idx) {
+  if (_editingCashName) { _editingCashName = null; renderAll(); return; }
   _dragAccId = accId; _dragIdx = idx;
   e.currentTarget.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
