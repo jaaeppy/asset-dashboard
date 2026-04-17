@@ -542,8 +542,8 @@ function fmtMonthLabel(ym) {
   return ym.slice(2).replace('-','/');
 }
 function fmtDateLabel(dateStr) {
-  // "2026-04-17" → "26/04/17"
-  return dateStr ? dateStr.slice(2).replace(/-/g,'/') : '';
+  // "2026-04-17" → "26/04"
+  return dateStr ? dateStr.slice(2, 7).replace('-', '/') : '';
 }
 
 function getMonthlyLiveData() {
