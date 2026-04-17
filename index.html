@@ -303,6 +303,11 @@
       margin-bottom: 16px; gap: 12px; flex-wrap: wrap;
     }
     .monthly-toolbar h2 { font-size: 16px; font-weight: 600; }
+    .monthly-toolbar-btns {
+      display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .monthly-toolbar-btns::-webkit-scrollbar { display: none; }
     .monthly-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .monthly-table {
       width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap;
@@ -410,11 +415,11 @@
 <div id="tab-monthly" class="tab-content hidden">
   <div class="monthly-toolbar">
     <h2>월별 자산 현황</h2>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:12px;color:var(--text-muted)" id="monthlyLastSaved"></span>
-      <button class="btn btn-outline btn-sm" onclick="saveMonthlySnapshotFor(MAIN_MONTHLY_CTX)">📌 이번달 스냅샷 저장</button>
+    <div class="monthly-toolbar-btns">
+      <span style="font-size:12px;color:var(--text-muted);white-space:nowrap" id="monthlyLastSaved"></span>
+      <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="saveMonthlySnapshotFor(MAIN_MONTHLY_CTX)">📌 이번달 스냅샷 저장</button>
       <button class="btn btn-outline btn-sm" onclick="exportMonthlyJSONFor(MAIN_MONTHLY_CTX)">내보내기</button>
-      <label class="btn btn-outline btn-sm" style="cursor:pointer">
+      <label class="btn btn-outline btn-sm" style="cursor:pointer;white-space:nowrap">
         가져오기 <input type="file" accept=".json" onchange="importMonthlyJSONFor(event, MAIN_MONTHLY_CTX)" style="display:none">
       </label>
     </div>
@@ -497,11 +502,11 @@
 <div id="tab-loan-monthly" class="tab-content hidden">
   <div class="monthly-toolbar">
     <h2>대출 월별 자산 현황</h2>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <span style="font-size:12px;color:var(--text-muted)" id="loanMonthlyLastSaved"></span>
-      <button class="btn btn-outline btn-sm" onclick="saveMonthlySnapshotFor(LOAN_MONTHLY_CTX)">📌 이번달 스냅샷 저장</button>
+    <div class="monthly-toolbar-btns">
+      <span style="font-size:12px;color:var(--text-muted);white-space:nowrap" id="loanMonthlyLastSaved"></span>
+      <button class="btn btn-outline btn-sm" style="white-space:nowrap" onclick="saveMonthlySnapshotFor(LOAN_MONTHLY_CTX)">📌 이번달 스냅샷 저장</button>
       <button class="btn btn-outline btn-sm" onclick="exportMonthlyJSONFor(LOAN_MONTHLY_CTX)">내보내기</button>
-      <label class="btn btn-outline btn-sm" style="cursor:pointer">
+      <label class="btn btn-outline btn-sm" style="cursor:pointer;white-space:nowrap">
         가져오기 <input type="file" accept=".json" onchange="importMonthlyJSONFor(event, LOAN_MONTHLY_CTX)" style="display:none">
       </label>
     </div>
