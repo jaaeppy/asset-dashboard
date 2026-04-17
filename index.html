@@ -407,6 +407,10 @@
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <span style="font-size:12px;color:var(--text-muted)" id="monthlyLastSaved"></span>
       <button class="btn btn-outline btn-sm" onclick="saveMonthlySnapshot()">📌 이번달 스냅샷 저장</button>
+      <button class="btn btn-outline btn-sm" onclick="exportMonthlyJSON()">내보내기</button>
+      <label class="btn btn-outline btn-sm" style="cursor:pointer">
+        가져오기 <input type="file" accept=".json" onchange="importMonthlyJSON(event)" style="display:none">
+      </label>
     </div>
   </div>
   <div class="monthly-table-wrap">
@@ -591,6 +595,42 @@ function saveMonthlySnapshot() {
   saveMonthlyData();
   renderMonthlyTab();
   showToast(`${ym} 스냅샷 저장 완료`);
+}
+
+function exportMonthlyJSON() {
+  const blob = new Blob([JSON.stringify(monthlyHistory, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `monthly_history_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  showToast('월별 데이터 내보내기 완료');
+}
+
+function importMonthlyJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      // 기존 데이터와 병합 (현재 월 live 데이터는 덮어쓰지 않음)
+      const currentYM = getYearMonth(new Date());
+      Object.entries(imported).forEach(([ym, data]) => {
+        if (ym === currentYM) return; // 현재 월은 skip
+        if (!monthlyHistory[ym]) {
+          monthlyHistory[ym] = data;
+        } else {
+          // 기존 note는 유지, 나머지는 덮어쓰기
+          monthlyHistory[ym] = { ...data, note: monthlyHistory[ym].note || data.note || '' };
+        }
+      });
+      saveMonthlyData();
+      renderMonthlyTab();
+      showToast(`월별 데이터 ${Object.keys(imported).length}개월 불러오기 완료`);
+    } catch(err) { showToast('파일을 읽을 수 없습니다'); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
 }
 
 function updateMonthlyNote(ym, value) {
