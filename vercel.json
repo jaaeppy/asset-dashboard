@@ -1,6 +1,7 @@
 {
-  "outputDirectory": "public",
-  "trailingSlash": false,
+  "buildCommand": null,
+  "outputDirectory": ".",
+  "framework": null,
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
