@@ -1178,10 +1178,11 @@ function mapExchange(name) {
 }
 
 // ── 네이버 금융 현재가 조회 — Vercel 서버리스 함수 경유 ─────────────────
-// /api/naver?code={6자리} 가 CORS 없이 Naver에 직접 접근
-async function fetchNaverStockPrice(code) {
+// /api/naver?code={6자리}&market={KS|KQ} → Naver 우선, StockConflict 시 Yahoo 폴백
+async function fetchNaverStockPrice(code, market) {
   try {
-    const res = await fetchWithTimeout(`/api/naver?code=${code}`, 8000);
+    const mParam = market ? `&market=${market}` : '';
+    const res = await fetchWithTimeout(`/api/naver?code=${code}${mParam}`, 12000);
     if (!res || !res.ok) return null;
     const d = await res.json();
     if (!d.price) return null;
@@ -1242,7 +1243,8 @@ async function fetchStockPrice(symbol, altSymbol) {
   // ① 국내주식: 네이버 금융 우선 (모든 코스피/코스닥 종목 지원)
   if (isKorean) {
     const code = symbol.slice(0, 6);
-    const naver = await fetchNaverStockPrice(code);
+    const market = symbol.endsWith('.KQ') ? 'KQ' : 'KS';
+    const naver = await fetchNaverStockPrice(code, market);
     if (naver) return naver;
   }
 
@@ -1264,7 +1266,8 @@ async function fetchStockPrice(symbol, altSymbol) {
   // ③ altSymbol (KS ↔ KQ 스왑) 시도
   if (altSymbol) {
     if (altSymbol.endsWith('.KS') || altSymbol.endsWith('.KQ')) {
-      const naverAlt = await fetchNaverStockPrice(altSymbol.slice(0, 6));
+      const altMarket = altSymbol.endsWith('.KQ') ? 'KQ' : 'KS';
+      const naverAlt = await fetchNaverStockPrice(altSymbol.slice(0, 6), altMarket);
       if (naverAlt) return naverAlt;
     }
     const yahooAlt = await fetchYahooStockPrice(altSymbol);
