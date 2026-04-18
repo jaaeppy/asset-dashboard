@@ -1,8 +1,7 @@
 {
-  "buildCommand": null,
   "outputDirectory": "public",
-  "framework": null,
+  "trailingSlash": false,
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
