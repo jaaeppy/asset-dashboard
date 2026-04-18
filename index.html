@@ -1732,12 +1732,14 @@ function createAccountCard(acc) {
     </div>`;
   }
 
+  // 항목이 없으면 접힌 상태로 시작
+  const isEmpty = items.length === 0;
   card.innerHTML = `
-    <div class="account-header" onclick="toggleSection('${acc.id}')">
+    <div class="account-header${isEmpty ? ' collapsed' : ''}" onclick="toggleSection('${acc.id}')">
       <h3><span class="badge ${acc.badge}">${acc.name}</span> <span class="toggle-icon" id="tog-${acc.id}">▼</span></h3>
       <div class="account-subtotal">${subtotalHTML}</div>
     </div>
-    <div class="account-body" id="body-${acc.id}">
+    <div class="account-body${isEmpty ? ' collapsed' : ''}" id="body-${acc.id}">
       <div class="table-scroll">${renderTableForAccount(acc, items)}</div>
       ${renderAddArea(acc)}
     </div>`;
