@@ -1754,6 +1754,7 @@ function renderTableForAccount(acc, items) {
   // Stock type
   const isUSD = acc.currency === 'USD';
   return `<table><thead><tr>
+    <th width="24"></th>
     <th style="text-align:left">종목명</th>
     <th>현재가${isUSD?' ($)':''}</th>
     <th>전일대비</th>
@@ -1785,6 +1786,7 @@ function renderTableForAccount(acc, items) {
       ondragover="onDragOver(event)"
       ondragleave="onDragLeave(event)"
       ondrop="onDrop(event,'${acc.id}',${i})">
+      <td class="drag-handle">⠿</td>
       <td>
         ${item.name}
         <input class="broker-input" type="text" value="${item.broker||''}"
