@@ -128,7 +128,7 @@
   {"name":"GS이앤알","symbol":"069960.KS","market":"KOSPI"},
 
   {"name":"TCC스틸","symbol":"002710.KS","market":"KOSPI"},
-  {"name":"산일전기","symbol":"062650.KS","market":"KOSPI"},
+  {"name":"산일전기","symbol":"062040.KS","market":"KOSPI"},
   {"name":"한국가스공사","symbol":"036460.KS","market":"KOSPI"},
   {"name":"한국항공우주","symbol":"047810.KS","market":"KOSPI"},
   {"name":"KAI","symbol":"047810.KS","market":"KOSPI"},
@@ -267,8 +267,8 @@
   {"name":"CJ ENM","symbol":"035760.KQ","market":"KOSDAQ"},
   {"name":"스튜디오드래곤","symbol":"253450.KQ","market":"KOSDAQ"},
 
-  {"name":"미래에셋벤처투자","symbol":"058290.KQ","market":"KOSDAQ"},
-  {"name":"비나텍","symbol":"065620.KQ","market":"KOSDAQ"},
+  {"name":"미래에셋벤처투자","symbol":"100790.KQ","market":"KOSDAQ"},
+  {"name":"비나텍","symbol":"126340.KQ","market":"KOSDAQ"},
   {"name":"셀비온","symbol":"308430.KQ","market":"KOSDAQ"},
   {"name":"아이티센글로벌","symbol":"124500.KQ","market":"KOSDAQ"},
   {"name":"아이티센","symbol":"124500.KQ","market":"KOSDAQ"},
