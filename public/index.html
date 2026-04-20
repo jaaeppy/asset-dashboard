@@ -1177,110 +1177,39 @@ function mapExchange(name) {
   return { KSC: 'KOSPI', KOE: 'KOSDAQ', NMS: 'NASDAQ', NGM: 'NASDAQ', NCM: 'NASDAQ', NYQ: 'NYSE', PCX: 'NYSE Arca', ASE: 'NYSE American' }[name] || name || '';
 }
 
-// ── 네이버 금융 현재가 조회 — Vercel 서버리스 함수 경유 ─────────────────
-// /api/naver?code={6자리}&market={KS|KQ} → Naver 우선, StockConflict 시 Yahoo 폴백
-async function fetchNaverStockPrice(code, market) {
+// ── Twelvedata 통합 주가 조회 — 국내/해외 모두 서버리스 함수 경유 ────────
+// /api/price?symbols=005930.KS,058290.KQ,AAPL,TSLA (배치 또는 단일)
+// 국내: 코드.KS/.KQ → Twelvedata KRX  /  해외: 심볼 그대로
+
+// 심볼 여러 개를 한 번에 조회 → { "005930.KS": {price,previousClose,...}, ... }
+async function fetchPriceBatch(symbolArr) {
+  if (!symbolArr || symbolArr.length === 0) return {};
   try {
-    const mParam = market ? `&market=${market}` : '';
-    const res = await fetchWithTimeout(`/api/naver?code=${code}${mParam}`, 12000);
-    if (!res || !res.ok) return null;
-    const d = await res.json();
-    if (!d.price) return null;
-    return {
-      price: d.price,
-      previousClose: d.previousClose || d.price,
-      currency: 'KRW',
-      symbol: d.symbol || `${code}.${d.exchange === 'KOSPI' ? 'KS' : 'KQ'}`,
-      exchange: d.exchange || 'KOSPI'
-    };
-  } catch(e) { return null; }
+    const param = symbolArr.join(',');
+    const res = await fetchWithTimeout(`/api/price?symbols=${encodeURIComponent(param)}`, 25000);
+    if (!res || !res.ok) return {};
+    return await res.json();
+  } catch(e) { return {}; }
 }
 
-// ── Yahoo Finance 현재가 조회 ─────────────────────────────────────────────
-async function fetchYahooStockPrice(sym) {
-  // v8 chart API (query1)
-  for (const host of ['query1', 'query2']) {
-    try {
-      const res = await corsFetch(`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`);
-      if (res) {
-        const data = await res.json();
-        const meta = data.chart?.result?.[0]?.meta;
-        if (meta && meta.regularMarketPrice) {
-          return {
-            price: meta.regularMarketPrice,
-            previousClose: meta.previousClose || meta.chartPreviousClose || 0,
-            currency: meta.currency || 'KRW',
-            symbol: meta.symbol,
-            exchange: mapExchange(meta.exchangeName)
-          };
-        }
-      }
-    } catch(e) {}
-  }
-  // v6 quote API (query1)
-  try {
-    const res = await corsFetch(`https://query1.finance.yahoo.com/v6/finance/quote?symbols=${encodeURIComponent(sym)}`);
-    if (res) {
-      const data = await res.json();
-      const q = data.quoteResponse?.result?.[0];
-      if (q && q.regularMarketPrice) {
-        return {
-          price: q.regularMarketPrice,
-          previousClose: q.regularMarketPreviousClose || 0,
-          currency: q.currency || 'KRW',
-          symbol: q.symbol,
-          exchange: mapExchange(q.fullExchangeName || q.exchange)
-        };
-      }
-    }
-  } catch(e) {}
-  return null;
-}
-
+// 단일 심볼 조회 (종목 추가/새로고침 등 개별 호출 시)
 async function fetchStockPrice(symbol, altSymbol) {
-  const isKorean = symbol.endsWith('.KS') || symbol.endsWith('.KQ');
-
-  // ① 국내주식: 네이버 금융 우선 (모든 코스피/코스닥 종목 지원)
-  if (isKorean) {
-    const code = symbol.slice(0, 6);
-    const market = symbol.endsWith('.KQ') ? 'KQ' : 'KS';
-    const naver = await fetchNaverStockPrice(code, market);
-    if (naver) return naver;
-  }
-
-  // ② Yahoo Finance (국내주식 fallback + 해외주식)
-  const yahoo = await fetchYahooStockPrice(symbol);
-  if (yahoo) {
-    // 거래소 불일치 자동 수정: .KS 심볼인데 KOSDAQ 반환 → .KQ로 재시도
-    if (isKorean) {
-      const symIsKS = symbol.endsWith('.KS');
-      if ((symIsKS && yahoo.exchange === 'KOSDAQ') || (!symIsKS && yahoo.exchange === 'KOSPI')) {
-        const corrected = symIsKS ? symbol.replace('.KS', '.KQ') : symbol.replace('.KQ', '.KS');
-        const retry = await fetchYahooStockPrice(corrected);
-        if (retry) return retry;
-      }
-    }
-    return yahoo;
-  }
-
-  // ③ altSymbol (KS ↔ KQ 스왑) 시도
+  const batch = await fetchPriceBatch([symbol]);
+  const r = batch[symbol];
+  if (r && r.price) return r;
+  // altSymbol 폴백 (KS↔KQ 스왑 등)
   if (altSymbol) {
-    if (altSymbol.endsWith('.KS') || altSymbol.endsWith('.KQ')) {
-      const altMarket = altSymbol.endsWith('.KQ') ? 'KQ' : 'KS';
-      const naverAlt = await fetchNaverStockPrice(altSymbol.slice(0, 6), altMarket);
-      if (naverAlt) return naverAlt;
-    }
-    const yahooAlt = await fetchYahooStockPrice(altSymbol);
-    if (yahooAlt) return yahooAlt;
+    const batch2 = await fetchPriceBatch([altSymbol]);
+    const r2 = batch2[altSymbol];
+    if (r2 && r2.price) return { ...r2, symbol: r2.symbol || symbol };
   }
-
   return null;
 }
 
 async function refreshAllPrices() {
   const statusEl = document.getElementById('statusText');
 
-  // 중복 제거: 유니크 심볼만 먼저 수집
+  // 양쪽 포트폴리오에서 유니크 심볼 수집
   const symbolSet = new Set();
   ACCOUNTS.forEach(acc => {
     if (acc.type === 'stock') {
@@ -1290,35 +1219,44 @@ async function refreshAllPrices() {
 
   const symbols = [...symbolSet];
   if (symbols.length === 0) { showToast('조회할 종목이 없습니다'); return; }
-  statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (0/${symbols.length})`;
+  statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (${symbols.length}개 종목)`;
 
-  // 심볼별 1회만 조회 후 캐시
+  // ── Twelvedata 배치 요청: 모든 심볼을 한 번에 조회 ──────────────────────
+  // Twelvedata 무료 티어: 8 콜/분 제한 → 최대 120개 심볼을 1회 콜로 처리
+  const BATCH_SIZE = 120;
   const priceCache = {};
-  let done = 0;
-  for (const sym of symbols) {
-    const result = await fetchStockPrice(sym);
-    if (result) priceCache[sym] = result;
-    done++;
-    statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (${done}/${symbols.length})`;
+
+  for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+    const batch = symbols.slice(i, i + BATCH_SIZE);
+    const results = await fetchPriceBatch(batch);
+    Object.assign(priceCache, results);
+    if (symbols.length > BATCH_SIZE) {
+      statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (${Math.min(i + BATCH_SIZE, symbols.length)}/${symbols.length})`;
+    }
   }
 
-  // 캐시된 결과를 모든 종목에 적용
-  let total = 0;
+  // 결과를 일반·대출 포트폴리오 모두에 적용
+  let updated = 0, failed = 0;
   ACCOUNTS.forEach(acc => {
     if (acc.type !== 'stock') return;
     (portfolio[acc.id] || []).forEach(item => {
       if (!item.symbol) return;
       const r = priceCache[item.symbol];
-      if (r) { item.price = r.price; item.previousClose = r.previousClose; }
-      total++;
+      if (r && r.price) {
+        item.price = r.price;
+        item.previousClose = r.previousClose;
+        updated++;
+      } else {
+        failed++;
+      }
     });
   });
 
-  statusEl.textContent = `마지막 시세 조회: ${new Date().toLocaleTimeString('ko-KR')}`;
+  const failMsg = failed > 0 ? ` (${failed}개 실패)` : '';
+  statusEl.textContent = `마지막 시세 조회: ${new Date().toLocaleTimeString('ko-KR')}${failMsg}`;
   saveData();
   renderAll();
-  showToast(`${total}개 종목 시세 업데이트 완료`);
-  // 말일 자동 저장 (시세 반영 후 실행)
+  showToast(`${updated}개 종목 시세 업데이트 완료${failMsg}`);
   checkAutoSaveMonthly();
 }
 
@@ -1689,27 +1627,26 @@ async function refreshLoanAllPrices() {
   });
   const symbols = [...symbolSet];
   if (symbols.length === 0) { showToast('조회할 종목이 없습니다'); return; }
-  statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (0/${symbols.length})`;
-  const priceCache = {}; let done = 0;
-  for (const sym of symbols) {
-    const result = await fetchStockPrice(sym);
-    if (result) priceCache[sym] = result;
-    done++;
-    statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (${done}/${symbols.length})`;
-  }
-  let total = 0;
+  statusEl.innerHTML = `<span class="loading-spinner"></span> 시세 조회중... (${symbols.length}개 종목)`;
+
+  // Twelvedata 배치 요청
+  const priceCache = await fetchPriceBatch(symbols);
+
+  let updated = 0, failed = 0;
   LOAN_ACCOUNTS.forEach(acc => {
     if (acc.type !== 'stock') return;
     (loanPortfolio[acc.id] || []).forEach(item => {
       if (!item.symbol) return;
       const r = priceCache[item.symbol];
-      if (r) { item.price = r.price; item.previousClose = r.previousClose; }
-      total++;
+      if (r && r.price) { item.price = r.price; item.previousClose = r.previousClose; updated++; }
+      else failed++;
     });
   });
-  statusEl.textContent = `마지막 시세 조회: ${new Date().toLocaleTimeString('ko-KR')}`;
+
+  const failMsg = failed > 0 ? ` (${failed}개 실패)` : '';
+  statusEl.textContent = `마지막 시세 조회: ${new Date().toLocaleTimeString('ko-KR')}${failMsg}`;
   saveLoanData(); renderLoanAll();
-  showToast(`${total}개 종목 시세 업데이트 완료`);
+  showToast(`${updated}개 종목 시세 업데이트 완료${failMsg}`);
   checkAutoSaveMonthlyFor(LOAN_MONTHLY_CTX);
 }
 
