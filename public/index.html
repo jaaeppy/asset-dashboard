@@ -630,6 +630,31 @@ const HOLDING_COLORS = [
 let exchangeRate = 1400;
 let portfolio = {};
 let loanPortfolio = {};
+
+// ── 심볼 마이그레이션 (잘못 입력된 코드 자동 교정) ──────────────────────────
+const SYMBOL_MIGRATIONS = {
+  '062650.KS': '062040.KS',  // 산일전기 (올바른 코드)
+  '062650.KQ': '062040.KS',  // 산일전기 suffix 오류도 교정
+  '058290.KQ': '100790.KQ',  // 미래에셋벤처투자
+  '058290.KS': '100790.KQ',  // 미래에셋벤처투자 suffix 오류
+  '065620.KQ': '126340.KQ',  // 비나텍
+  '065620.KS': '126340.KQ',  // 비나텍 suffix 오류
+};
+function migratePortfolioSymbols(data) {
+  if (!data || typeof data !== 'object') return data;
+  let changed = false;
+  const result = {};
+  for (const [accId, items] of Object.entries(data)) {
+    result[accId] = (Array.isArray(items) ? items : []).map(item => {
+      if (item && item.symbol && SYMBOL_MIGRATIONS[item.symbol]) {
+        changed = true;
+        return { ...item, symbol: SYMBOL_MIGRATIONS[item.symbol] };
+      }
+      return item;
+    });
+  }
+  return changed ? result : data;
+}
 let searchTimeout = null;
 let activeSearchAccId = null;
 let searchResults = {}; // store results per accId
@@ -951,7 +976,9 @@ function init() {
       window._fbOnValue('portfolio', snapshot => {
         const data = snapshot.val();
         if (data) {
-          portfolio = data;
+          const migrated = migratePortfolioSymbols(data);
+          portfolio = migrated;
+          if (migrated !== data) saveData(); // 교정된 경우 Firebase에 다시 저장
           ACCOUNTS.forEach(a => { if (!portfolio[a.id]) portfolio[a.id] = []; });
           try { localStorage.setItem('portfolio_v2', JSON.stringify(portfolio)); } catch(e) {}
           renderAll();
@@ -973,7 +1000,9 @@ function init() {
         window._fbOnValue('loanPortfolio', snap => {
           const d = snap.val();
           if (d) {
-            loanPortfolio = d;
+            const migrated = migratePortfolioSymbols(d);
+            loanPortfolio = migrated;
+            if (migrated !== d) saveLoanData(); // 교정된 경우 Firebase에 다시 저장
             LOAN_ACCOUNTS.forEach(a => { if (!loanPortfolio[a.id]) loanPortfolio[a.id] = []; });
             try { localStorage.setItem('loanPortfolio_v1', JSON.stringify(loanPortfolio)); } catch(e) {}
             if (activeTab === 'loan-portfolio') renderLoanAll();
@@ -1591,7 +1620,7 @@ function saveLoanData() {
 function loadLoanData() {
   try {
     const saved = localStorage.getItem('loanPortfolio_v1');
-    if (saved) loanPortfolio = JSON.parse(saved);
+    if (saved) loanPortfolio = migratePortfolioSymbols(JSON.parse(saved));
   } catch(e) {}
 }
 
@@ -2121,7 +2150,7 @@ function loadData() {
   // localStorage 백업에서 먼저 로드 (Firebase 연결 전 빈 화면 방지)
   try {
     const saved = localStorage.getItem('portfolio_v2');
-    if (saved) portfolio = JSON.parse(saved);
+    if (saved) portfolio = migratePortfolioSymbols(JSON.parse(saved));
     const rate = localStorage.getItem('portfolio_exchange_rate');
     if (rate) exchangeRate = parseFloat(rate);
   } catch(e) { console.warn('Load failed', e); }
