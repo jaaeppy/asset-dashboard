@@ -141,11 +141,6 @@
     tr.drag-over { border-top: 2px solid var(--accent); }
     td.drag-handle { cursor: grab; color: var(--text-muted); font-size: 16px; padding: 0 6px; user-select: none; }
     td.drag-handle:active { cursor: grabbing; }
-    /* 드래그 정렬 — 주식 행 (롱프레스) */
-    tr[data-drag-acc] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-    tr[data-drag-acc] input, tr[data-drag-acc] button { -webkit-user-select: auto; user-select: auto; }
-    tr.stock-dragging { opacity: 0.35; outline: 2px solid var(--accent); outline-offset: -2px; cursor: grabbing; }
-    tr.stock-drop-indicator { box-shadow: 0 -3px 0 0 var(--accent); }
 
     /* ===== SEARCH / ADD ===== */
     .add-area {
@@ -1785,7 +1780,11 @@ function renderTableForAccount(acc, items) {
     const pnlCls = pnl >= 0 ? 'positive' : 'negative';
     const chgCls = change >= 0 ? 'positive' : 'negative';
 
-    return `<tr data-drag-acc="${acc.id}" data-drag-idx="${i}">
+    return `<tr draggable="true"
+      ondragstart="onDragStart(event,'${acc.id}',${i})"
+      ondragover="onDragOver(event)"
+      ondragleave="onDragLeave(event)"
+      ondrop="onDrop(event,'${acc.id}',${i})">
       <td>
         ${item.name}
         <input class="broker-input" type="text" value="${item.broker||''}"
@@ -2107,107 +2106,6 @@ function onDrop(e, accId, toIdx) {
   saveAndRenderFor(accId);
 }
 
-// ===== 롱프레스 드래그 정렬 (주식 행 — Pointer Events) =====
-let _sd = null;
-
-// 롱프레스 중 컨텍스트 메뉴 방지
-document.addEventListener('contextmenu', e => {
-  if (_sd?.active || e.target.closest('tr[data-drag-acc]') && _sd) e.preventDefault();
-}, { passive: false });
-
-document.addEventListener('pointerdown', function(e) {
-  if (_sd) return; // 이미 드래그 중
-  const tr = e.target.closest('tr[data-drag-acc]');
-  if (!tr || e.target.closest('input,button,select')) return;
-
-  _sd = {
-    tr, pointerId: e.pointerId,
-    accId: tr.dataset.dragAcc,
-    fromIdx: +tr.dataset.dragIdx,
-    toIdx: +tr.dataset.dragIdx,
-    sx: e.clientX, sy: e.clientY,
-    active: false,
-    timer: setTimeout(_sdActivate, 420)
-  };
-  document.addEventListener('pointermove', _sdMove, { passive: false });
-  document.addEventListener('pointerup', _sdUp);
-  document.addEventListener('pointercancel', _sdCancel);
-}, { passive: true });
-
-function _sdActivate() {
-  if (!_sd) return;
-  _sd.active = true;
-  _sd.tr.classList.add('stock-dragging');
-  try { _sd.tr.setPointerCapture(_sd.pointerId); } catch (_) {}
-  if (navigator.vibrate) navigator.vibrate(30);
-}
-
-function _sdMove(e) {
-  if (!_sd) return;
-  if (!_sd.active) {
-    // 롱프레스 확정 전 — 8px 이상 움직이면 일반 스크롤로 취소
-    if (Math.hypot(e.clientX - _sd.sx, e.clientY - _sd.sy) > 8) {
-      clearTimeout(_sd.timer);
-      _sdCleanup();
-    }
-    return;
-  }
-  e.preventDefault(); // 드래그 중 스크롤 방지
-
-  const table = _sd.tr.closest('table');
-  if (!table) return;
-  const rows = [...table.querySelectorAll('tbody tr[data-drag-acc]')];
-  rows.forEach(r => r.classList.remove('stock-drop-indicator'));
-
-  // 현재 포인터 위치로 삽입 위치 결정
-  let toIdx = rows.length; // 기본: 맨 끝
-  for (let i = 0; i < rows.length; i++) {
-    const rect = rows[i].getBoundingClientRect();
-    if (e.clientY < rect.top + rect.height / 2) {
-      toIdx = +rows[i].dataset.dragIdx;
-      break;
-    }
-  }
-
-  _sd.toIdx = toIdx;
-
-  // 드롭 위치 표시선
-  if (toIdx !== _sd.fromIdx) {
-    const indicatorRow = toIdx < rows.length ? rows[toIdx] : rows[rows.length - 1];
-    if (indicatorRow && +indicatorRow.dataset.dragIdx !== _sd.fromIdx) {
-      indicatorRow.classList.add('stock-drop-indicator');
-    }
-  }
-}
-
-function _sdUp() {
-  if (!_sd) { _sdCleanup(); return; }
-  const { active, accId, fromIdx, toIdx } = _sd;
-  _sdCleanup();
-  if (!active || fromIdx === toIdx) return;
-
-  const arr = getPortfolioFor(accId)[accId];
-  const [moved] = arr.splice(fromIdx, 1);
-  // fromIdx보다 뒤에 삽입할 경우 1 감소 (splice로 앞 항목이 제거됐으므로)
-  const insertAt = Math.min(toIdx > fromIdx ? toIdx - 1 : toIdx, arr.length);
-  arr.splice(insertAt, 0, moved);
-  saveAndRenderFor(accId);
-}
-
-function _sdCancel() { _sdCleanup(); }
-
-function _sdCleanup() {
-  if (_sd) {
-    clearTimeout(_sd.timer);
-    _sd.tr?.classList.remove('stock-dragging');
-    _sd.tr?.closest('table')
-      ?.querySelectorAll('tr').forEach(r => r.classList.remove('stock-drop-indicator'));
-  }
-  _sd = null;
-  document.removeEventListener('pointermove', _sdMove);
-  document.removeEventListener('pointerup', _sdUp);
-  document.removeEventListener('pointercancel', _sdCancel);
-}
 
 function removeItem(accId, index) {
   const pf = getPortfolioFor(accId);
