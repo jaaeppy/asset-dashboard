@@ -133,20 +133,30 @@ module.exports = async function handler(req, res) {
       catch (e) { /* fall through to Yahoo */ }
 
       if (d) {
+        // Naver API 구조 변경 대응 (dealTrendInfos 우선)
+        const dt = d.dealTrendInfos?.[0] || {};
         const price =
           toNum(d.closePrice) ||
           toNum(d.currentPrice) ||
           toNum(d.stockEndOfDayInfos?.[0]?.closePrice) ||
-          toNum(d.dealTrendInfos?.[0]?.closePrice);
+          toNum(dt.closePrice);
 
         if (price && !isNaN(price)) {
-          const prev = toNum(d.previousClosePrice) || price;
+          const change = toNum(dt.compareToPreviousClosePrice);
+          const prev = toNum(d.previousClosePrice) || (price - change) || price;
+
+          // KOSPI/KOSDAQ 판별: stockExchangeType → market param 힌트 → 기본 KOSPI
           const tc = (d.stockExchangeType?.typeCode ?? '').toUpperCase();
           const sc = (d.stockExchangeType?.shortTypeCode ?? '').toUpperCase();
-          const exchange =
-            tc.includes('KOSDAQ') || sc === 'SDQ' || sc === 'KSQ' || sc === 'KOE'
-              ? 'KOSDAQ'
-              : 'KOSPI';
+          const scCode = (d.stockExchangeType?.code ?? '').toUpperCase();
+          let exchange;
+          if (tc.includes('KOSDAQ') || sc === 'SDQ' || sc === 'KSQ' || sc === 'KOE') {
+            exchange = 'KOSDAQ';
+          } else if (tc.includes('KOSPI') || sc === 'STK' || scCode === 'KS') {
+            exchange = 'KOSPI';
+          } else {
+            exchange = market === 'KQ' ? 'KOSDAQ' : 'KOSPI';
+          }
 
           naverResult = {
             price,
